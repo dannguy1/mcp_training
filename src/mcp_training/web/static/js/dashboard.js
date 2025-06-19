@@ -50,6 +50,11 @@ class DashboardManager {
         const ctx = document.getElementById('trainingChart');
         if (!ctx) return;
         
+        // Destroy existing chart if it exists
+        if (this.charts.training) {
+            this.charts.training.destroy();
+        }
+        
         this.charts.training = new Chart(ctx, {
             type: 'line',
             data: {
@@ -116,6 +121,11 @@ class DashboardManager {
     initSystemMetricsChart() {
         const ctx = document.getElementById('systemMetricsChart');
         if (!ctx) return;
+        
+        // Destroy existing chart if it exists
+        if (this.charts.systemMetrics) {
+            this.charts.systemMetrics.destroy();
+        }
         
         this.charts.systemMetrics = new Chart(ctx, {
             type: 'line',
@@ -405,8 +415,12 @@ class DashboardManager {
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    // Prevent multiple initializations
+    if (window.dashboard) {
+        window.dashboard.destroy();
+    }
     window.dashboard = new DashboardManager();
 });
 
 // Global functions for use in HTML
-window.refreshDashboard = () => window.dashboard.refresh(); 
+window.refreshDashboard = () => window.dashboard?.refresh(); 

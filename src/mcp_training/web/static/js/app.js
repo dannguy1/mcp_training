@@ -5,7 +5,6 @@
 class MCPTrainingApp {
     constructor() {
         this.currentPage = utils.getCurrentPage();
-        this.charts = {};
         this.websocket = null;
         this.autoRefreshInterval = null;
         this.init();
@@ -183,55 +182,10 @@ class MCPTrainingApp {
     }
     
     updateTrainingChart(trainingJobs) {
-        const chartCanvas = document.getElementById('trainingChart');
-        if (!chartCanvas) return;
-        
-        if (!this.charts.training) {
-            this.initTrainingChart(chartCanvas);
+        // Let DashboardManager handle chart updates if it exists
+        if (window.dashboard && window.dashboard.charts && window.dashboard.charts.training) {
+            window.dashboard.updateTrainingChart(trainingJobs);
         }
-        
-        const activeJobs = trainingJobs.filter(job => job.status === 'running');
-        
-        this.charts.training.data.labels = activeJobs.map(job => `Job ${job.id}`);
-        this.charts.training.data.datasets[0].data = activeJobs.map(job => job.progress || 0);
-        this.charts.training.update();
-    }
-    
-    initTrainingChart(canvas) {
-        this.charts.training = new Chart(canvas, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Training Progress',
-                    data: [],
-                    borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        ticks: {
-                            callback: function(value) {
-                                return value + '%';
-                            }
-                        }
-                    }
-                }
-            }
-        });
     }
     
     updateActivityList(trainingJobs) {
