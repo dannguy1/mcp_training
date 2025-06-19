@@ -1,0 +1,101 @@
+# Model Configuration for MCP Training Service
+
+# Default model type
+default_model: isolation_forest
+
+# Model configurations
+models:
+  isolation_forest:
+    name: "Isolation Forest"
+    description: "Isolation Forest for anomaly detection"
+    parameters:
+      n_estimators: 100
+      max_samples: "auto"
+      contamination: 0.1
+      max_features: 1.0
+      bootstrap: false
+      n_jobs: -1
+      random_state: 42
+      verbose: 0
+      warm_start: false
+    
+  local_outlier_factor:
+    name: "Local Outlier Factor"
+    description: "Local Outlier Factor for anomaly detection"
+    parameters:
+      n_neighbors: 20
+      algorithm: "auto"
+      leaf_size: 30
+      metric: "minkowski"
+      p: 2
+      metric_params: null
+      contamination: 0.1
+      novelty: false
+      n_jobs: -1
+
+# Feature extraction configuration
+feature_extraction:
+  wifi_features:
+    enabled: true
+    features:
+      - connection_count
+      - unique_macs
+      - connection_frequency
+      - time_based_features
+      - message_patterns
+      - process_activity
+    
+  time_features:
+    enabled: true
+    features:
+      - hour_of_day
+      - day_of_week
+      - minute_of_hour
+      - time_since_midnight
+    
+  text_features:
+    enabled: true
+    features:
+      - message_length
+      - word_count
+      - special_char_count
+      - uppercase_ratio
+
+# Training configuration
+training:
+  test_size: 0.2
+  random_state: 42
+  cross_validation_folds: 5
+  scoring_metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - roc_auc
+  
+  # Early stopping configuration
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 0.001
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc_score
+    - confusion_matrix
+  
+  thresholds:
+    anomaly_threshold: 0.5
+    confidence_threshold: 0.8
+
+# Model persistence
+persistence:
+  format: joblib
+  compression: gzip
+  include_metadata: true
+  include_evaluation: true 

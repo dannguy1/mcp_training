@@ -1,0 +1,91 @@
+# Training Service Configuration
+
+# Service settings
+service:
+  name: mcp-training
+  version: 1.0.0
+  debug: false
+  log_level: INFO
+
+# API configuration
+api:
+  host: 0.0.0.0
+  port: 8001
+  workers: 1
+  cors_origins:
+    - "*"
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+
+# Storage configuration
+storage:
+  models_dir: models
+  exports_dir: exports
+  logs_dir: logs
+  temp_dir: /tmp/mcp_training
+  
+  # File retention
+  retention:
+    models_days: 30
+    exports_days: 7
+    logs_days: 14
+
+# Training settings
+training:
+  max_training_time: 3600  # seconds
+  max_memory_usage: 4096   # MB
+  enable_gpu: false
+  parallel_training: true
+  max_parallel_jobs: 2
+  
+  # Resource limits
+  resource_limits:
+    cpu_percent: 80
+    memory_percent: 80
+    disk_percent: 90
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    port: 9091
+    path: /metrics
+  
+  health_check:
+    enabled: true
+    interval: 30
+    timeout: 5
+  
+  logging:
+    level: INFO
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file: logs/training.log
+    max_size: 10MB
+    backup_count: 5
+
+# Security configuration
+security:
+  api_key_required: false
+  allowed_ips: []
+  rate_limiting: true
+  
+  # SSL/TLS (for production)
+  ssl:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+
+# Integration settings
+integration:
+  # MCP Service integration
+  mcp_service:
+    enabled: true
+    api_url: "http://localhost:8000"
+    api_key: ""
+    
+  # Model deployment
+  deployment:
+    auto_deploy: false
+    deployment_dir: "../mcp_service/models"
+    backup_existing: true 
