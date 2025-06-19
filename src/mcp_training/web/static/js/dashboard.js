@@ -50,136 +50,176 @@ class DashboardManager {
         const ctx = document.getElementById('trainingChart');
         if (!ctx) return;
         
+        // Check if Chart.js is available
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not loaded, skipping chart initialization');
+            return;
+        }
+        
+        // Check if canvas is already being used by another chart
+        if (ctx.chart) {
+            console.log('Canvas already has a chart, destroying existing chart');
+            ctx.chart.destroy();
+        }
+        
         // Destroy existing chart if it exists
         if (this.charts.training) {
             this.charts.training.destroy();
         }
         
-        this.charts.training = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Training Progress',
-                    data: [],
-                    borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: {
-                            label: function(context) {
-                                return `Progress: ${context.parsed.y}%`;
-                            }
-                        }
-                    }
+        try {
+            this.charts.training = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Training Progress',
+                        data: [],
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
                 },
-                scales: {
-                    x: {
-                        display: true,
-                        title: {
-                            display: true,
-                            text: 'Time'
-                        }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: {
-                            display: true,
-                            text: 'Progress (%)'
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
                         },
-                        ticks: {
-                            callback: function(value) {
-                                return value + '%';
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Progress: ${context.parsed.y}%`;
+                                }
                             }
                         }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Progress (%)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
                     }
-                },
-                interaction: {
-                    mode: 'nearest',
-                    axis: 'x',
-                    intersect: false
                 }
-            }
-        });
+            });
+            
+            // Store reference to chart on canvas element
+            ctx.chart = this.charts.training;
+            
+        } catch (error) {
+            console.error('Failed to initialize training chart:', error);
+        }
     }
     
     initSystemMetricsChart() {
         const ctx = document.getElementById('systemMetricsChart');
         if (!ctx) return;
         
+        // Check if Chart.js is available
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not loaded, skipping chart initialization');
+            return;
+        }
+        
+        // Check if canvas is already being used by another chart
+        if (ctx.chart) {
+            console.log('Canvas already has a chart, destroying existing chart');
+            ctx.chart.destroy();
+        }
+        
         // Destroy existing chart if it exists
         if (this.charts.systemMetrics) {
             this.charts.systemMetrics.destroy();
         }
         
-        this.charts.systemMetrics = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'CPU Usage',
-                    data: [],
-                    borderColor: '#dc3545',
-                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
-                    tension: 0.4,
-                    fill: false
-                }, {
-                    label: 'Memory Usage',
-                    data: [],
-                    borderColor: '#fd7e14',
-                    backgroundColor: 'rgba(253, 126, 20, 0.1)',
-                    tension: 0.4,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top'
-                    }
+        try {
+            this.charts.systemMetrics = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU Usage',
+                        data: [],
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        tension: 0.4,
+                        fill: false
+                    }, {
+                        label: 'Memory Usage',
+                        data: [],
+                        borderColor: '#fd7e14',
+                        backgroundColor: 'rgba(253, 126, 20, 0.1)',
+                        tension: 0.4,
+                        fill: false
+                    }]
                 },
-                scales: {
-                    x: {
-                        display: true,
-                        title: {
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
                             display: true,
-                            text: 'Time'
+                            position: 'top'
                         }
                     },
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: {
+                    scales: {
+                        x: {
                             display: true,
-                            text: 'Usage (%)'
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
                         },
-                        ticks: {
-                            callback: function(value) {
-                                return value + '%';
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Usage (%)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+            
+            // Store reference to chart on canvas element
+            ctx.chart = this.charts.systemMetrics;
+            
+        } catch (error) {
+            console.error('Failed to initialize system metrics chart:', error);
+        }
     }
     
     async updateDashboard() {
@@ -415,11 +455,14 @@ class DashboardManager {
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // Prevent multiple initializations
-    if (window.dashboard) {
-        window.dashboard.destroy();
-    }
-    window.dashboard = new DashboardManager();
+    // Add a small delay to ensure main app has finished loading
+    setTimeout(() => {
+        // Prevent multiple initializations
+        if (window.dashboard) {
+            window.dashboard.destroy();
+        }
+        window.dashboard = new DashboardManager();
+    }, 100);
 });
 
 // Global functions for use in HTML
