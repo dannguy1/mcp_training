@@ -73,7 +73,8 @@ class TrainingService:
         try:
             # Step 1: Validate export data
             await self._update_progress(training_id, 5, 'Validating export data')
-            validation = await self.export_validator.validate_export_for_training(export_file)
+            is_valid, errors = self.export_validator.validate_export_file(export_file)
+            validation = {'is_valid': is_valid, 'errors': errors}
             
             if not validation['is_valid']:
                 await self._update_progress(training_id, 0, 'Validation failed', 
@@ -84,29 +85,22 @@ class TrainingService:
             await self._update_progress(training_id, 10, 'Loading export data')
             exported_data = await self._load_exported_data(export_file)
             
-            # Step 3: Extract features
-            await self._update_progress(training_id, 30, 'Extracting features')
-            features = await self.feature_extractor.extract_wifi_features(exported_data['data'])
+            # Step 3: Train model
+            await self._update_progress(training_id, 50, 'Training model')
+            training_result = self.model_trainer.train(exported_data['data'], model_name=model_name)
+            model = training_result.get('model')
             
-            # Step 4: Prepare training data
-            await self._update_progress(training_id, 50, 'Preparing training data')
-            X, y = self._prepare_training_data(features)
-            
-            # Step 5: Train model
-            await self._update_progress(training_id, 70, 'Training model')
-            model = await self.model_trainer.train_model(X, y, config_overrides)
-            
-            # Step 6: Evaluate model
+            # Step 4: Get evaluation results from training
             await self._update_progress(training_id, 85, 'Evaluating model')
-            evaluation_results = await self.model_trainer.evaluate_model(model, X, y)
+            evaluation_results = training_result.get('evaluation', {})
             
-            # Step 7: Save model
+            # Step 5: Save model
             await self._update_progress(training_id, 95, 'Saving model')
             model_path = await self._save_model_with_metadata(
-                model, features, evaluation_results, export_file, training_id, model_type
+                model, training_result.get('features', {}), evaluation_results, export_file, training_id, model_type
             )
             
-            # Step 8: Complete
+            # Step 6: Complete
             await self._update_progress(training_id, 100, 'Training completed', 
                                       result={'model_path': str(model_path)})
             
@@ -218,6 +212,25 @@ class TrainingService:
                 self.training_tasks[training_id]['status'] = 'completed'
             else:
                 self.training_tasks[training_id]['status'] = 'running'
+            
+            # Broadcast progress update via WebSocket
+            try:
+                from ..api.routes.websocket import broadcast_training_update, broadcast_error
+                
+                if error:
+                    await broadcast_error(f"Training job {training_id} failed: {error}", "training")
+                else:
+                    await broadcast_training_update(
+                        job_id=training_id,
+                        progress=progress,
+                        status=self.training_tasks[training_id]['status'],
+                        step=step,
+                        result=result
+                    )
+            except ImportError:
+                logger.warning("WebSocket broadcasting not available")
+            except Exception as e:
+                logger.error(f"Failed to broadcast training update: {e}")
     
     def get_training_status(self, training_id: str) -> Optional[Dict[str, Any]]:
         """Get training status by ID."""
@@ -238,7 +251,8 @@ class TrainingService:
     
     async def validate_export(self, export_file: str) -> Dict[str, Any]:
         """Validate an export file."""
-        return await self.export_validator.validate_export_for_training(export_file)
+        is_valid, errors = self.export_validator.validate_export_file(export_file)
+        return {'is_valid': is_valid, 'errors': errors}
     
     def get_model_registry(self) -> ModelRegistry:
         """Get model registry instance."""

@@ -157,6 +157,36 @@ class ModelService:
             success = self.registry.deploy_model(version, deployed_by)
             if success:
                 logger.info(f"Model {version} deployed successfully")
+                
+                # Broadcast model ready notification via WebSocket
+                try:
+                    import asyncio
+                    from ..api.routes.websocket import broadcast_model_ready
+                    
+                    # Create async task to broadcast
+                    async def broadcast():
+                        await broadcast_model_ready(
+                            model_id=version,
+                            deployed_by=deployed_by,
+                            deployed_at=datetime.now().isoformat()
+                        )
+                    
+                    # Run in event loop if available
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(broadcast())
+                        else:
+                            loop.run_until_complete(broadcast())
+                    except RuntimeError:
+                        # No event loop, skip broadcasting
+                        pass
+                        
+                except ImportError:
+                    logger.warning("WebSocket broadcasting not available")
+                except Exception as e:
+                    logger.error(f"Failed to broadcast model ready: {e}")
+                    
             return success
         except Exception as e:
             logger.error(f"Error deploying model {version}: {e}")

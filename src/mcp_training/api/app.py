@@ -4,12 +4,14 @@ FastAPI application for MCP Training Service.
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from ..core.config import get_config
+from ..core.config import get_config, config as core_config
 from ..utils.logger import setup_logging, get_logger
 from ..services.training_service import TrainingService
 from ..services.model_service import ModelService
@@ -18,7 +20,8 @@ from ..services.deps import set_services
 from .middleware.logging import LoggingMiddleware, RequestIDMiddleware, PerformanceMiddleware
 from .middleware.cors import setup_cors
 from .middleware.auth import get_auth_middleware
-from .routes import health, training, models
+from .routes import health, training, models, web, settings, logs, websocket
+from ..models.config import ModelConfig
 
 
 @asynccontextmanager
@@ -30,6 +33,10 @@ async def lifespan(app: FastAPI):
     try:
         # Load configuration
         config = get_config()
+        
+        # Load model config from YAML
+        model_config_data = core_config.model_config_data
+        model_config = ModelConfig(**model_config_data)
         
         # Setup logging
         setup_logging(
@@ -50,6 +57,7 @@ async def lifespan(app: FastAPI):
         )
         
         training_service = TrainingService(
+            config=model_config,
             model_service=model_service,
             storage_service=storage_service
         )
@@ -163,19 +171,39 @@ def setup_routes(app: FastAPI):
     """
     logger = get_logger(__name__)
     
-    # Include route modules
-    app.include_router(health.router, prefix="/health", tags=["health"])
-    app.include_router(training.router, prefix="/training", tags=["training"])
-    app.include_router(models.router, prefix="/models", tags=["models"])
+    # Setup static files
+    static_dir = Path(__file__).parent.parent / "web" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        logger.info(f"Static files mounted at /static from {static_dir}")
     
-    # Root endpoint
-    @app.get("/", tags=["root"])
-    async def root():
-        """Root endpoint."""
+    # Include API route modules
+    app.include_router(health.router, prefix="/api/health", tags=["health"])
+    app.include_router(training.router, prefix="/api/training", tags=["training"])
+    app.include_router(models.router, prefix="/api/models", tags=["models"])
+    app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+    app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
+    
+    # Include WebSocket routes
+    app.include_router(websocket.router, tags=["websocket"])
+    
+    # Include web routes (HTML pages)
+    app.include_router(web.router, tags=["web"])
+    
+    # API root endpoint
+    @app.get("/api", tags=["api"])
+    async def api_root():
+        """API root endpoint."""
         return {
             "service": "MCP Training Service",
             "version": "1.0.0",
-            "status": "running"
+            "status": "running",
+            "endpoints": {
+                "health": "/api/health",
+                "training": "/api/training",
+                "models": "/api/models",
+                "web": "/"
+            }
         }
     
     logger.info("Routes configured")
