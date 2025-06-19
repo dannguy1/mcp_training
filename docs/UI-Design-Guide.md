@@ -13,305 +13,410 @@
 ## Technology Stack
 
 ### Core Dependencies
-- **React 18.2.0** with TypeScript
-- **React Router DOM 6.22.3** for routing
-- **React Bootstrap 2.10.10** for UI components
-- **Bootstrap 5.3.6** for styling framework
-- **Ant Design 4.24.12** for additional components
-- **React Query (@tanstack/react-query 5.80.6)** for data fetching
-- **React Hot Toast 2.5.2** for notifications
-- **Axios 1.9.0** for HTTP requests
-
-### Icon Libraries
-- **Ant Design Icons 4.8.0** for primary icons
-- **Heroicons React 2.2.0** for additional icons
-- **React Icons 5.5.0** for miscellaneous icons
+- **FastAPI** for backend API and server-side rendering
+- **Jinja2 Templates** for server-side rendered UI
+- **Bootstrap 5.3.6** for styling framework and components
+- **Bootstrap Icons** for icon library
+- **Chart.js** for data visualization
+- **Vanilla JavaScript** for client-side interactions
+- **WebSocket** for real-time updates
 
 ### Development Tools
-- **Vite 6.3.5** for build tooling
-- **TypeScript 5.8.3** for type safety
-- **ESLint 9.28.0** for code linting
+- **Python 3.10+** for backend development
+- **Pydantic** for data validation and serialization
+- **Uvicorn** for ASGI server
+- **ESLint** for JavaScript linting (if using)
 
 ## Project Structure
 
 ```
-frontend/src/
-├── components/          # Reusable UI components
-│   ├── common/         # Shared components
-│   ├── dashboard/      # Dashboard-specific components
-│   ├── export/         # Export functionality components
-│   ├── layout/         # Layout components
-│   └── models/         # Model management components
-├── hooks/              # Custom React hooks
-├── pages/              # Page components
-├── services/           # API and service layer
-├── styles/             # Additional styling
-├── App.tsx             # Main app component
-├── App.css             # Global app styles
-├── index.css           # Base styles and variables
-└── main.tsx            # App entry point
+src/mcp_training/web/
+├── templates/           # Jinja2 HTML templates
+│   ├── base.html       # Main layout template
+│   ├── components/     # Reusable UI components
+│   │   ├── navbar.html # Top navigation bar
+│   │   ├── sidebar.html # Off-canvas sidebar
+│   │   └── loading.html # Loading overlay
+│   ├── pages/          # Page-specific templates
+│   │   ├── dashboard.html
+│   │   ├── training.html
+│   │   ├── models.html
+│   │   ├── logs.html
+│   │   └── settings.html
+│   └── partials/       # Template partials
+│       ├── head.html   # HTML head section
+│       └── scripts.html # JavaScript includes
+├── static/             # Static assets
+│   ├── css/           # Stylesheets
+│   │   ├── main.css   # Global styles
+│   │   ├── components.css # Component styles
+│   │   └── variables.css # CSS variables
+│   └── js/            # JavaScript files
+│       ├── app.js     # Main application logic
+│       ├── utils.js   # Utility functions
+│       ├── dashboard.js # Dashboard functionality
+│       ├── training.js # Training page logic
+│       ├── models.js  # Models page logic
+│       ├── logs.js    # Logs viewer logic
+│       └── settings.js # Settings management
+└── api/               # FastAPI routes
+    ├── app.py         # Main FastAPI application
+    ├── routes/        # API route handlers
+    │   ├── web.py     # Web page routes
+    │   ├── training.py # Training API
+    │   ├── models.py  # Models API
+    │   ├── logs.py    # Logs API
+    │   └── settings.py # Settings API
+    └── middleware/    # Middleware components
 ```
 
 ## Layout Structure
 
 ### Main Layout Pattern
-```tsx
-// App.tsx - Main wrapper
-<ErrorBoundary>
-  <BrowserRouter>
-    <AppRoutes />
-  </BrowserRouter>
-</ErrorBoundary>
-
-// Layout.tsx - Navigation and content wrapper
-<div className="d-flex flex-column min-vh-100">
-  <Navbar bg="dark" variant="dark" className="px-3">
-    {/* Top navigation */}
-  </Navbar>
-  <Offcanvas show={show} onHide={handleClose} className="bg-dark text-light">
-    {/* Sidebar navigation */}
-  </Offcanvas>
-  <div className="flex-grow-1">
-    <Container fluid className="py-4">
-      <Outlet />
-    </Container>
-  </div>
-</div>
+```html
+<!-- base.html - Main wrapper -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'partials/head.html' %}
+</head>
+<body>
+    <div class="d-flex flex-column min-vh-100">
+        {% include 'components/navbar.html' %}
+        
+        <main class="flex-grow-1">
+            <div class="container-fluid py-4">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    {% include 'components/sidebar.html' %}
+    {% include 'components/loading.html' %}
+    {% include 'partials/scripts.html' %}
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
 ```
 
 ### Page Structure
 - Page title as `h2` element with `mb-4` class
 - Content organized in Bootstrap Cards
 - Consistent spacing using Bootstrap utility classes
-- Loading states with `Spinner` component
-- Error states with `Alert` component
+- Loading states with overlay component
+- Error states with Bootstrap Alert components
 
 ## Navigation
 
-### Top Bar Implementation
-```tsx
-<Navbar bg="dark" variant="dark" className="px-3">
-  <Navbar.Brand>
-    <button className="btn btn-dark me-3" onClick={handleShow}>
-      ☰
-    </button>
-    MCP Service
-  </Navbar.Brand>
-</Navbar>
+### Fixed Top Bar Implementation
+```html
+<!-- navbar.html -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3">
+    <div class="container-fluid">
+        <button class="btn btn-dark me-3" id="sidebarToggle" type="button">
+            <i class="bi bi-list"></i>
+        </button>
+        
+        <a class="navbar-brand" href="/">
+            <i class="bi bi-cpu me-2"></i>
+            MCP Training Service
+        </a>
+    </div>
+</nav>
 ```
 
 **Key Classes:**
-- `bg-dark` - Dark background
-- `variant="dark"` - Dark theme variant
+- `navbar-dark bg-dark` - Dark theme navigation
 - `px-3` - Horizontal padding
+- `sticky-top` - Fixed positioning (handled by CSS)
+- `z-index: 1030` - High z-index for overlay
 
-### Sidebar Implementation
-```tsx
-<Offcanvas show={show} onHide={handleClose} className="bg-dark text-light">
-  <Offcanvas.Header closeButton closeVariant="white">
-    <Offcanvas.Title>MCP Service</Offcanvas.Title>
-  </Offcanvas.Header>
-  <Offcanvas.Body>
-    <Nav className="flex-column">
-      {menuItems.map((item) => (
-        <Nav.Link
-          key={item.path}
-          as={Link}
-          to={item.path}
-          className={`text-light mb-2 ${location.pathname === item.path ? "active" : ""}`}
-          onClick={handleClose}
-        >
-          <span className="me-2">{item.icon}</span>
-          {item.label}
-        </Nav.Link>
-      ))}
-    </Nav>
-  </Offcanvas.Body>
-</Offcanvas>
+### Off-Canvas Sidebar Implementation
+```html
+<!-- sidebar.html -->
+<div class="offcanvas offcanvas-start bg-dark text-light" id="sidebar" tabindex="-1" aria-labelledby="sidebarLabel" data-bs-backdrop="true" data-bs-scroll="true">
+    <div class="offcanvas-header border-bottom border-secondary">
+        <h5 class="offcanvas-title" id="sidebarLabel">Navigation</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    
+    <div class="offcanvas-body">
+        <nav class="sidebar-nav">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link text-light mb-2" href="/" data-page="dashboard">
+                        <i class="bi bi-speedometer2 me-2"></i>
+                        Dashboard
+                    </a>
+                </li>
+                <!-- Additional navigation items -->
+            </ul>
+        </nav>
+    </div>
+</div>
 ```
 
 **Key Classes:**
+- `offcanvas offcanvas-start` - Left-side off-canvas panel
 - `bg-dark text-light` - Dark background with light text
 - `flex-column` - Vertical navigation layout
 - `text-light mb-2` - Light text with bottom margin
-- `active` - Active state styling
 
-### Navigation Items Structure
-```tsx
-const menuItems = [
-  {
-    path: '/',
-    label: 'Dashboard',
-    icon: <DashboardOutlined />,
-  },
-  {
-    path: '/logs',
-    label: 'Logs',
-    icon: <FileTextOutlined />,
-  },
-  // ... additional items
-];
+### Sidebar Toggle JavaScript
+```javascript
+// app.js
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebar = new bootstrap.Offcanvas(document.getElementById('sidebar'));
+    
+    sidebarToggle.addEventListener('click', function() {
+        sidebar.show();
+    });
+});
 ```
 
 ## Components
 
 ### Card Implementation
-```tsx
-<Card className="mb-4">
-  <Card.Header>Card Title</Card.Header>
-  <Card.Body>
-    {/* Card content */}
-  </Card.Body>
-</Card>
+```html
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0">Card Title</h6>
+    </div>
+    <div class="card-body">
+        <!-- Card content -->
+    </div>
+</div>
 ```
 
 **Key Classes:**
 - `mb-4` - Bottom margin for spacing
-- `Card.Header` - White background with bottom border
-- `Card.Body` - Content padding
+- `card-header` - White background with bottom border
+- `card-body` - Content padding
 
 ### Table Implementation
-```tsx
-<Card>
-  <Card.Body>
-    <Table responsive hover>
-      <thead>
-        <tr>
-          <th>Column Header</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Data</td>
-        </tr>
-      </tbody>
-    </Table>
-  </Card.Body>
-</Card>
+```html
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Column Header</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Data</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 ```
 
 **Key Classes:**
-- `responsive` - Responsive table behavior
-- `hover` - Row hover effects
+- `table-responsive` - Responsive table behavior
+- `table-hover` - Row hover effects
 - Wrapped in Card for consistent styling
 
 ### Status Badge Implementation
-```tsx
-<span className={`badge bg-${statusColor}`}>
-  {status}
-</span>
+```html
+<span class="badge bg-success">Healthy</span>
+<span class="badge bg-danger">Error</span>
+<span class="badge bg-warning">Warning</span>
+<span class="badge bg-info">Info</span>
 ```
 
 **Status Color Mapping:**
-```tsx
-const getStatusColor = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'connected':
-    case 'healthy':
-    case 'completed':
-      return 'success';
-    case 'disconnected':
-    case 'failed':
-      return 'danger';
-    case 'warning':
-    case 'pending':
-      return 'warning';
-    case 'running':
-      return 'info';
-    default:
-      return 'secondary';
-  }
-};
+```javascript
+// utils.js
+function getStatusColor(status) {
+    switch (status.toLowerCase()) {
+        case 'connected':
+        case 'healthy':
+        case 'completed':
+            return 'success';
+        case 'disconnected':
+        case 'failed':
+            return 'danger';
+        case 'warning':
+        case 'pending':
+            return 'warning';
+        case 'running':
+            return 'info';
+        default:
+            return 'secondary';
+    }
+}
 ```
 
 ### Form Implementation
-```tsx
-<Form>
-  <Form.Group className="mb-3">
-    <Form.Label>Label</Form.Label>
-    <Form.Control
-      type="text"
-      placeholder="Placeholder"
-      value={value}
-      onChange={handleChange}
-    />
-  </Form.Group>
-  <Button variant="primary" type="submit">
-    Submit
-  </Button>
-</Form>
+```html
+<form id="settingsForm">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="mb-3">
+                <label for="settingName" class="form-label">Setting Name</label>
+                <input type="text" class="form-control" id="settingName" placeholder="Enter setting">
+                <div class="form-text">Help text for the setting.</div>
+            </div>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check me-2"></i>
+        Save Settings
+    </button>
+</form>
 ```
 
 **Key Classes:**
 - `mb-3` - Bottom margin for form groups
-- `Form.Label` - Consistent label styling
-- `Form.Control` - Input styling with focus states
+- `form-label` - Consistent label styling
+- `form-control` - Input styling with focus states
+- `form-text` - Help text styling
+
+### Horizontal Tabs Implementation
+```html
+<!-- For internal page navigation (e.g., Settings page) -->
+<ul class="nav nav-tabs" id="pageTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab1-tab" data-bs-toggle="tab" data-bs-target="#tab1" type="button" role="tab">
+            <i class="bi bi-gear me-2"></i>
+            Tab 1
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab2-tab" data-bs-toggle="tab" data-bs-target="#tab2" type="button" role="tab">
+            <i class="bi bi-cpu me-2"></i>
+            Tab 2
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="pageTabsContent">
+    <div class="tab-pane fade show active" id="tab1" role="tabpanel">
+        <!-- Tab 1 content -->
+    </div>
+    <div class="tab-pane fade" id="tab2" role="tabpanel">
+        <!-- Tab 2 content -->
+    </div>
+</div>
+```
 
 ## Styling
 
 ### CSS File Organization
-1. **index.css** - Base styles, variables, and global overrides
-2. **App.css** - Layout-specific styles and component overrides
-3. **layout.css** - Layout component specific styles
+1. **variables.css** - CSS custom properties and design tokens
+2. **main.css** - Global styles and layout
+3. **components.css** - Component-specific styles
 
-### Color Palette
-```css
-/* Primary Colors */
---bs-primary: #0d6efd;    /* Bootstrap blue */
---bs-success: #198754;    /* Green */
---bs-warning: #ffc107;    /* Yellow */
---bs-danger: #dc3545;     /* Red */
---bs-info: #0dcaf0;       /* Blue */
---bs-secondary: #6c757d;  /* Gray */
-
-/* Background Colors */
---bs-light: #f8f9fa;      /* Light background */
---bs-dark: #212529;       /* Dark background */
-```
-
-### Typography
+### Design Tokens (CSS Variables)
 ```css
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light dark;
-  color: #213547;
-  background-color: #f8f9fa;
+  /* Color Palette */
+  --bs-primary: #0d6efd;
+  --bs-success: #198754;
+  --bs-warning: #ffc107;
+  --bs-danger: #dc3545;
+  --bs-info: #0dcaf0;
+  --bs-secondary: #6c757d;
+  
+  /* Typography */
+  --font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 3rem;
+  
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.2);
+  
+  /* Border Radius */
+  --border-radius-sm: 0.25rem;
+  --border-radius: 0.375rem;
+  --border-radius-lg: 0.5rem;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-normal: 0.2s ease-in-out;
+  --transition-slow: 0.3s ease-in-out;
+}
+```
+
+### Layout Styling
+```css
+/* Fixed navbar */
+.navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Main content area */
+main {
+    flex-grow: 1;
+    width: 100%;
+    min-height: calc(100vh - 56px); /* Account for navbar height */
+}
+
+/* Offcanvas sidebar */
+.offcanvas {
+    width: 250px;
+}
+
+.offcanvas-header {
+    padding: 1rem;
+}
+
+.offcanvas-body {
+    padding: 1rem;
 }
 ```
 
 ### Card Styling
 ```css
 .card {
-  border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    border-radius: var(--border-radius);
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
 }
 
 .card-header {
-  background-color: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  font-weight: 600;
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
 }
 ```
 
 ### Button Styling
 ```css
 .btn {
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  transition: all 0.2s ease-in-out;
+    font-weight: var(--font-weight-medium);
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-normal);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+    transform: translateY(-1px);
 }
 ```
 
@@ -319,8 +424,36 @@ const getStatusColor = (status: string) => {
 ```css
 .form-control:focus,
 .form-select:focus {
-  border-color: #86b7fe;
-  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+```
+
+### Horizontal Tabs Styling
+```css
+/* Horizontal Tabs Styles */
+.nav-tabs .nav-link {
+    color: #6c757d !important;
+    background-color: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+    padding: 0.75rem 1rem !important;
+    font-weight: var(--font-weight-medium) !important;
+    transition: all var(--transition-normal) !important;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--bs-primary) !important;
+    background-color: rgba(13, 110, 253, 0.05) !important;
+    border-color: #e9ecef #e9ecef #dee2e6 !important;
+}
+
+.nav-tabs .nav-link.active {
+    color: #212529 !important;
+    background-color: #fff !important;
+    border-color: #dee2e6 #dee2e6 #fff !important;
+    border-bottom-color: #fff !important;
+    font-weight: var(--font-weight-semibold) !important;
 }
 ```
 
@@ -330,32 +463,36 @@ const getStatusColor = (status: string) => {
 ```css
 /* Mobile: < 768px */
 @media (max-width: 768px) {
-  .sidebar {
-    transform: translateX(-100%);
-  }
-  
-  .sidebar.show {
-    transform: translateX(0);
-  }
-  
-  .main-content {
-    margin-left: 0;
-  }
+    .offcanvas {
+        width: 100%;
+    }
+    
+    .card-deck {
+        flex-direction: column;
+    }
+    
+    .card-deck .card {
+        margin-bottom: 1rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
 }
 
 /* Tablet: 768px - 992px */
 @media (min-width: 768px) and (max-width: 992px) {
-  .sidebar {
-    width: 100%;
-    max-width: 300px;
-  }
+    .offcanvas {
+        width: 100%;
+        max-width: 300px;
+    }
 }
 
 /* Desktop: > 992px */
 @media (min-width: 992px) {
-  .sidebar {
-    width: 250px;
-  }
+    .offcanvas {
+        width: 250px;
+    }
 }
 ```
 
@@ -371,198 +508,308 @@ const getStatusColor = (status: string) => {
 - Maintained readability with proper spacing
 
 ### Desktop Optimizations
-- Fixed sidebar (when implemented)
+- Off-canvas sidebar (can be expanded to fixed sidebar)
 - Multi-column layouts
 - Hover effects
 - Optimal spacing and typography
 
 ## Implementation Patterns
 
-### Data Fetching Pattern
-```tsx
-import { useQuery } from '@tanstack/react-query';
+### Page Template Pattern
+```html
+{% extends "base.html" %}
 
-const Component: React.FC = () => {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['data-key'],
-    queryFn: () => apiEndpoint.getData(),
-    refetchInterval: 30000, // Optional auto-refresh
-  });
+{% block title %}Page Title - MCP Training Service{% endblock %}
 
-  if (isLoading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '200px' }}>
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert variant="danger">
-        <FaExclamationTriangle className="me-2" />
-        Error loading data: {error instanceof Error ? error.message : 'Unknown error'}
-      </Alert>
-    );
-  }
-
-  return (
-    <div>
-      <h2 className="mb-4">Page Title</h2>
-      {/* Component content */}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Page Title</h2>
     </div>
-  );
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Card Title</h6>
+            </div>
+            <div class="card-body">
+                <!-- Page content -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', path='/js/page-specific.js') }}"></script>
+{% endblock %}
+```
+
+### JavaScript Module Pattern
+```javascript
+// page-specific.js
+class PageManager {
+    constructor() {
+        this.init();
+    }
+    
+    init() {
+        this.setupEventListeners();
+        this.loadData();
+    }
+    
+    setupEventListeners() {
+        // Event listener setup
+    }
+    
+    async loadData() {
+        try {
+            utils.showLoading();
+            const data = await utils.apiCall('/api/endpoint');
+            this.updateUI(data);
+        } catch (error) {
+            utils.showError('Failed to load data', error);
+        } finally {
+            utils.hideLoading();
+        }
+    }
+    
+    updateUI(data) {
+        // Update DOM with data
+    }
+}
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.pageManager = new PageManager();
+});
+```
+
+### API Integration Pattern
+```javascript
+// utils.js
+const utils = {
+    async apiCall(endpoint, options = {}) {
+        const defaultOptions = {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        };
+        
+        const config = { ...defaultOptions, ...options };
+        
+        try {
+            const response = await fetch(endpoint, config);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('API call failed:', error);
+            throw error;
+        }
+    },
+    
+    showLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'flex';
+    },
+    
+    hideLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'none';
+    },
+    
+    showError(message, error) {
+        // Show error notification
+        console.error(message, error);
+    },
+    
+    showSuccess(message) {
+        // Show success notification
+        console.log(message);
+    }
 };
 ```
 
-### Error Boundary Pattern
-```tsx
-import React from 'react';
-
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error?: Error }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="error-boundary">
-          <h2>Something went wrong.</h2>
-          <pre>{this.state.error?.message}</pre>
-        </div>
-      );
+### WebSocket Integration Pattern
+```javascript
+// app.js
+class WebSocketManager {
+    constructor() {
+        this.ws = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.reconnectDelay = 1000;
     }
-
-    return this.props.children;
-  }
+    
+    connect() {
+        try {
+            this.ws = new WebSocket('ws://localhost:8000/ws');
+            
+            this.ws.onopen = () => {
+                console.log('WebSocket connected');
+                this.reconnectAttempts = 0;
+            };
+            
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                this.handleMessage(data);
+            };
+            
+            this.ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                this.reconnect();
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        } catch (error) {
+            console.error('Failed to connect WebSocket:', error);
+        }
+    }
+    
+    reconnect() {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            setTimeout(() => {
+                console.log(`Reconnecting... Attempt ${this.reconnectAttempts}`);
+                this.connect();
+            }, this.reconnectDelay * this.reconnectAttempts);
+        }
+    }
+    
+    handleMessage(data) {
+        // Handle different message types
+        switch (data.type) {
+            case 'status_update':
+                this.updateStatus(data.payload);
+                break;
+            case 'training_update':
+                this.updateTraining(data.payload);
+                break;
+            default:
+                console.log('Unknown message type:', data.type);
+        }
+    }
 }
 ```
 
-### Modal Pattern
-```tsx
-const [showModal, setShowModal] = useState(false);
-
-<Modal show={showModal} onHide={() => setShowModal(false)}>
-  <Modal.Header closeButton>
-    <Modal.Title>Modal Title</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    {/* Modal content */}
-  </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowModal(false)}>
-      Cancel
-    </Button>
-    <Button variant="primary" onClick={handleSubmit}>
-      Submit
-    </Button>
-  </Modal.Footer>
-</Modal>
-```
-
-### Table with Actions Pattern
-```tsx
-<Table responsive hover>
-  <thead>
-    <tr>
-      <th>Column 1</th>
-      <th>Column 2</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {data.map((item) => (
-      <tr key={item.id}>
-        <td>{item.field1}</td>
-        <td>{item.field2}</td>
-        <td>
-          <div className="d-flex gap-2">
-            <Button variant="info" size="sm" onClick={() => handleInfo(item.id)}>
-              <FaInfoCircle />
-            </Button>
-            <Button variant="danger" size="sm" onClick={() => handleDelete(item.id)}>
-              <FaTrash />
-            </Button>
-          </div>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</Table>
-```
-
-### Status Panel Pattern
-```tsx
-<Card className="mb-4">
-  <Card.Header>Status Panel</Card.Header>
-  <Card.Body>
-    <Row>
-      <Col md={4}>
-        <div className="text-center">
-          <h5>Status</h5>
-          <span className={`badge bg-${status === "healthy" ? "success" : "danger"}`}>
-            {status}
-          </span>
-        </div>
-      </Col>
-      {/* Additional status columns */}
-    </Row>
-  </Card.Body>
-</Card>
+### Form Handling Pattern
+```javascript
+// settings.js
+class SettingsManager {
+    constructor() {
+        this.settings = {};
+        this.originalSettings = {};
+        this.init();
+    }
+    
+    init() {
+        this.setupEventListeners();
+        this.loadSettings();
+    }
+    
+    setupEventListeners() {
+        // Form submission
+        const form = document.getElementById('settingsForm');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveSettings();
+            });
+        }
+        
+        // Real-time validation
+        this.setupRealTimeValidation();
+    }
+    
+    async loadSettings() {
+        try {
+            utils.showLoading();
+            const settings = await utils.apiCall('/api/settings');
+            this.settings = settings;
+            this.originalSettings = JSON.parse(JSON.stringify(settings));
+            this.populateSettingsForms();
+        } catch (error) {
+            utils.showError('Failed to load settings', error);
+        } finally {
+            utils.hideLoading();
+        }
+    }
+    
+    async saveSettings() {
+        try {
+            utils.showLoading();
+            const settings = this.collectSettingsFromForms();
+            
+            await utils.apiCall('/api/settings', {
+                method: 'PUT',
+                body: JSON.stringify(settings),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            utils.showSuccess('Settings saved successfully');
+            this.originalSettings = JSON.parse(JSON.stringify(settings));
+        } catch (error) {
+            utils.showError('Failed to save settings', error);
+        } finally {
+            utils.hideLoading();
+        }
+    }
+}
 ```
 
 ### Loading and Error States
-```tsx
-// Loading State
-<div className="d-flex justify-content-center align-items-center" style={{ minHeight: '200px' }}>
-  <Spinner animation="border" role="status">
-    <span className="visually-hidden">Loading...</span>
-  </Spinner>
+```html
+<!-- Loading State -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
 </div>
 
-// Error State
-<Alert variant="danger">
-  <FaExclamationTriangle className="me-2" />
-  Error message here
-</Alert>
+<!-- Error State -->
+<div class="alert alert-danger" role="alert">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    Error message here
+</div>
 
-// Empty State
-<div className="text-center text-muted py-4">
-  <p>No data available</p>
+<!-- Empty State -->
+<div class="text-center text-muted py-4">
+    <i class="bi bi-file-text fs-1 mb-3"></i>
+    <p>No data available</p>
 </div>
 ```
 
 ## Best Practices
 
-### Component Organization
-1. **Single Responsibility** - Each component should have one clear purpose
-2. **Props Interface** - Define clear TypeScript interfaces for component props
-3. **Error Handling** - Always handle loading and error states
-4. **Accessibility** - Use proper ARIA labels and semantic HTML
+### Template Organization
+1. **Template Inheritance** - Use `{% extends %}` for consistent layouts
+2. **Component Reusability** - Create reusable components with `{% include %}`
+3. **Block Structure** - Use `{% block %}` for flexible content areas
+4. **Conditional Rendering** - Use `{% if %}` for dynamic content
+
+### JavaScript Organization
+1. **Module Pattern** - Use classes for page-specific functionality
+2. **Event Delegation** - Use event listeners efficiently
+3. **Error Handling** - Always handle API errors gracefully
+4. **Loading States** - Show loading indicators for async operations
 
 ### Styling Guidelines
 1. **Bootstrap First** - Use Bootstrap classes before custom CSS
-2. **Consistent Spacing** - Use Bootstrap spacing utilities (`mb-4`, `p-3`, etc.)
+2. **CSS Variables** - Use design tokens for consistency
 3. **Responsive Design** - Always consider mobile-first approach
 4. **Performance** - Minimize custom CSS and leverage Bootstrap utilities
 
 ### State Management
-1. **React Query** - Use for server state management
-2. **Local State** - Use useState for component-specific state
+1. **Server State** - Use FastAPI for data management
+2. **Client State** - Use JavaScript classes for UI state
 3. **Form State** - Use controlled components with proper validation
-4. **Error Boundaries** - Wrap components to catch and handle errors gracefully 
+4. **Real-time Updates** - Use WebSocket for live data updates 

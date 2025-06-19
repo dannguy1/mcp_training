@@ -137,7 +137,9 @@ class MCPTrainingApp {
     
     async loadLogsData() {
         try {
-            const logs = await utils.apiCall('/logs/');
+            const response = await utils.apiCall('/logs/');
+            // Extract logs array from response
+            const logs = response.logs || [];
             this.updateLogsTable(logs);
         } catch (error) {
             utils.showError('Failed to load logs data', error);
@@ -145,12 +147,8 @@ class MCPTrainingApp {
     }
     
     async loadSettingsData() {
-        try {
-            const settings = await utils.apiCall('/settings');
-            this.updateSettingsForm(settings);
-        } catch (error) {
-            utils.showError('Failed to load settings data', error);
-        }
+        // Settings are handled by SettingsManager in settings.js
+        // No need to load settings data here
     }
     
     updateDashboard(status, trainingJobs, models) {

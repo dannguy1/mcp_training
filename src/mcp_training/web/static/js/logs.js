@@ -126,9 +126,11 @@ class LogsManager {
             if (level) params.append('level', level);
             if (service) params.append('service', service);
             
-            const logs = await utils.apiCall(`/logs/?${params}`);
-            this.logs = logs;
-            this.filteredLogs = [...logs];
+            const response = await utils.apiCall(`/logs/?${params}`);
+            
+            // Extract logs array from response
+            this.logs = response.logs || [];
+            this.filteredLogs = [...this.logs];
             this.updateLogsTable();
             this.updateLogStatistics();
         } catch (error) {

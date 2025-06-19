@@ -22,7 +22,12 @@ class TrainingLogEntry(BaseModel):
     step: Optional[str] = Field(None, description="Training step")
     progress: Optional[float] = Field(None, description="Training progress percentage")
     module: Optional[str] = Field(None, description="Module name")
-    extra: Optional[Dict[str, Any]] = Field(None, description="Additional log data")
+    extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional log data")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 class TrainingLogList(BaseModel):
@@ -96,7 +101,14 @@ def _read_training_logs(log_file_path: str, max_lines: int = 1000) -> List[Dict[
                 extra_fields = {}
                 for key, value in log_entry.items():
                     if key not in ['timestamp', 'level', 'message', 'module', 'function', 'line', 'logger']:
-                        extra_fields[key] = value
+                        # Ensure value is serializable
+                        try:
+                            # Test if value can be JSON serialized
+                            json.dumps(value)
+                            extra_fields[key] = value
+                        except (TypeError, ValueError):
+                            # Convert non-serializable values to strings
+                            extra_fields[key] = str(value)
                 
                 log_entry['extra'] = extra_fields
                 
@@ -193,16 +205,35 @@ async def get_training_logs(
         # Convert to TrainingLogEntry objects
         log_entries = []
         for log in logs:
-            log_entries.append(TrainingLogEntry(
-                timestamp=log.get('timestamp', datetime.now()),
-                level=log.get('level', 'INFO'),
-                message=log.get('message', ''),
-                training_id=log.get('training_id'),
-                step=log.get('extra', {}).get('step'),
-                progress=log.get('progress'),
-                module=log.get('module'),
-                extra=log.get('extra', {})
-            ))
+            try:
+                # Ensure extra field is a dict and serializable
+                extra_data = log.get('extra', {})
+                if not isinstance(extra_data, dict):
+                    extra_data = {}
+                
+                # Clean extra data to ensure it's serializable
+                clean_extra = {}
+                for key, value in extra_data.items():
+                    try:
+                        json.dumps(value)
+                        clean_extra[key] = value
+                    except (TypeError, ValueError):
+                        clean_extra[key] = str(value)
+                
+                log_entries.append(TrainingLogEntry(
+                    timestamp=log.get('timestamp', datetime.now()),
+                    level=log.get('level', 'INFO'),
+                    message=log.get('message', ''),
+                    training_id=log.get('training_id'),
+                    step=log.get('extra', {}).get('step'),
+                    progress=log.get('progress'),
+                    module=log.get('module'),
+                    extra=clean_extra
+                ))
+            except Exception as e:
+                # Skip problematic log entries
+                print(f"Error creating TrainingLogEntry: {e}")
+                continue
         
         return TrainingLogList(
             logs=log_entries,

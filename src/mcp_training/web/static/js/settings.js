@@ -15,11 +15,11 @@ class SettingsManager {
     }
     
     setupEventListeners() {
-        // Settings tabs
-        const settingsTabs = document.querySelectorAll('[data-bs-toggle="list"]');
+        // Settings tabs - updated for horizontal tabs
+        const settingsTabs = document.querySelectorAll('[data-bs-toggle="tab"]');
         settingsTabs.forEach(tab => {
             tab.addEventListener('shown.bs.tab', (e) => {
-                this.handleTabChange(e.target.getAttribute('href'));
+                this.handleTabChange(e.target.getAttribute('data-bs-target'));
             });
         });
         
@@ -101,7 +101,12 @@ class SettingsManager {
             this.originalSettings = JSON.parse(JSON.stringify(settings));
             this.populateSettingsForms();
         } catch (error) {
+            console.error('Failed to load settings:', error);
             utils.showError('Failed to load settings', error);
+            // Set default settings if API fails
+            this.settings = this.getDefaultSettings();
+            this.originalSettings = JSON.parse(JSON.stringify(this.settings));
+            this.populateSettingsForms();
         } finally {
             utils.hideLoading();
         }
@@ -438,11 +443,75 @@ class SettingsManager {
         
         current[keys[keys.length - 1]] = value;
     }
+    
+    getDefaultSettings() {
+        return {
+            general: {
+                service_name: "MCP Training Service",
+                version: "1.0.0",
+                timezone: "UTC",
+                date_format: "YYYY-MM-DD",
+                auto_refresh: true,
+                notifications: true
+            },
+            training: {
+                max_concurrent_jobs: 3,
+                default_max_iterations: 1000,
+                default_learning_rate: 0.01,
+                job_timeout: 24,
+                default_config: {"algorithm": "random_forest", "n_estimators": 100, "max_depth": 10}
+            },
+            storage: {
+                models_dir: "models",
+                exports_dir: "exports",
+                logs_dir: "logs",
+                max_storage_gb: 10,
+                auto_cleanup: true,
+                retention_days: 30
+            },
+            logging: {
+                level: "INFO",
+                format: "structured",
+                file: "logs/mcp_training.log",
+                max_size_mb: 100,
+                console: true,
+                file_enabled: true
+            },
+            security: {
+                auth_enabled: false,
+                api_key: "",
+                cors_origins: "http://localhost:3000,https://example.com",
+                rate_limit: 100,
+                https_only: false,
+                secure_headers: true
+            },
+            advanced: {
+                debug_mode: false,
+                performance_monitoring: true,
+                websocket_enabled: true,
+                auto_backup: false,
+                custom_config: {"custom_setting": "value"}
+            }
+        };
+    }
 }
 
 // Initialize settings manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.settingsManager = new SettingsManager();
+    try {
+        window.settingsManager = new SettingsManager();
+    } catch (error) {
+        console.error('Failed to initialize SettingsManager:', error);
+        // Create a minimal settings manager to prevent errors
+        window.settingsManager = {
+            settings: {},
+            loadSettings: () => Promise.resolve(),
+            saveSettings: () => Promise.resolve(),
+            resetSettings: () => {},
+            exportSettings: () => {},
+            importSettings: () => {}
+        };
+    }
 });
 
 // Global functions for use in HTML

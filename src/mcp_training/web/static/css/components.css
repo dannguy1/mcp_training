@@ -192,7 +192,8 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.nav-link.active {
+/* Sidebar navigation active state */
+.sidebar-nav .nav-link.active {
     background-color: var(--bs-primary);
     color: white !important;
 }
@@ -302,6 +303,41 @@
 .settings-sidebar .nav-link i {
     width: 20px;
     text-align: center;
+}
+
+/* Horizontal Tabs Styles */
+.nav-tabs .nav-link {
+    color: #6c757d !important;
+    background-color: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+    padding: 0.75rem 1rem !important;
+    font-weight: var(--font-weight-medium) !important;
+    transition: all var(--transition-normal) !important;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--bs-primary) !important;
+    background-color: rgba(13, 110, 253, 0.05) !important;
+    border-color: #e9ecef #e9ecef #dee2e6 !important;
+}
+
+.nav-tabs .nav-link.active {
+    color: #212529 !important;
+    background-color: #fff !important;
+    border-color: #dee2e6 #dee2e6 #fff !important;
+    border-bottom-color: #fff !important;
+    font-weight: var(--font-weight-semibold) !important;
+}
+
+.nav-tabs .nav-link.active:hover {
+    color: #212529 !important;
+    background-color: #fff !important;
+    border-color: #dee2e6 #dee2e6 #fff !important;
+}
+
+.nav-tabs .nav-link i {
+    margin-right: 0.5rem !important;
 }
 
 /* Responsive adjustments for settings */
