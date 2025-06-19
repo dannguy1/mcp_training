@@ -1,0 +1,329 @@
+/* Component-specific styles */
+
+/* Status Cards */
+.status-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.status-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background-color: var(--bs-primary);
+}
+
+.status-card.success::before {
+    background-color: var(--bs-success);
+}
+
+.status-card.warning::before {
+    background-color: var(--bs-warning);
+}
+
+.status-card.danger::before {
+    background-color: var(--bs-danger);
+}
+
+.status-card.info::before {
+    background-color: var(--bs-info);
+}
+
+/* Metric Display */
+.metric-value {
+    font-size: 2rem;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Progress Indicators */
+.progress-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: conic-gradient(var(--bs-primary) 0deg, #e9ecef 0deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.progress-circle::before {
+    content: attr(data-progress) '%';
+    position: absolute;
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-semibold);
+}
+
+.progress-circle::after {
+    content: '';
+    width: 50px;
+    height: 50px;
+    background: white;
+    border-radius: 50%;
+}
+
+/* Activity Feed */
+.activity-feed {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.activity-item {
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 0.5rem;
+}
+
+.activity-time {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+/* Charts */
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+.chart-container canvas {
+    max-height: 100%;
+}
+
+/* Tables */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.table-actions {
+    white-space: nowrap;
+}
+
+.table-actions .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Forms */
+.form-floating > .form-control,
+.form-floating > .form-select {
+    height: calc(3.5rem + 2px);
+    line-height: 1.25;
+}
+
+.form-floating > label {
+    padding: 1rem 0.75rem;
+}
+
+/* Modals */
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: #f8f9fa;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: #f8f9fa;
+}
+
+/* File Upload */
+.file-upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    text-align: center;
+    transition: border-color var(--transition-normal);
+    cursor: pointer;
+}
+
+.file-upload-area:hover {
+    border-color: var(--bs-primary);
+}
+
+.file-upload-area.dragover {
+    border-color: var(--bs-primary);
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* Badges */
+.badge {
+    font-weight: var(--font-weight-medium);
+    padding: 0.35em 0.65em;
+}
+
+/* Tooltips */
+.tooltip {
+    font-size: 0.875rem;
+}
+
+/* Dropdowns */
+.dropdown-menu {
+    border: none;
+    box-shadow: var(--shadow-md);
+    border-radius: var(--border-radius);
+}
+
+.dropdown-item {
+    padding: 0.5rem 1rem;
+    transition: background-color var(--transition-fast);
+}
+
+.dropdown-item:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Navigation */
+.nav-link {
+    transition: all var(--transition-fast);
+    border-radius: var(--border-radius);
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link.active {
+    background-color: var(--bs-primary);
+    color: white !important;
+}
+
+/* Sidebar */
+.sidebar-nav .nav-link {
+    margin-bottom: 0.25rem;
+    padding: 0.75rem 1rem;
+}
+
+.sidebar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: translateX(4px);
+}
+
+/* Loading Spinners */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Alert Variations */
+.alert-dismissible .btn-close {
+    padding: 0.75rem 1rem;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Print Styles */
+@media print {
+    .sidebar,
+    .navbar,
+    .btn,
+    .modal {
+        display: none !important;
+    }
+    
+    .main-content {
+        margin-left: 0 !important;
+    }
+    
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #dee2e6 !important;
+    }
+}
+
+/* Settings Page Styles */
+.settings-sidebar {
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.settings-sidebar .nav-pills {
+    gap: 0.5rem;
+}
+
+.settings-sidebar .nav-link {
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 0.75rem 1rem;
+    color: #6c757d;
+    background: transparent;
+    transition: all var(--transition-normal);
+    text-align: left;
+    font-weight: var(--font-weight-medium);
+}
+
+.settings-sidebar .nav-link:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: var(--bs-primary);
+    transform: translateX(4px);
+}
+
+.settings-sidebar .nav-link.active {
+    background-color: var(--bs-primary);
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-sidebar .nav-link.active:hover {
+    background-color: var(--bs-primary);
+    color: white;
+    transform: none;
+}
+
+.settings-sidebar .nav-link i {
+    width: 20px;
+    text-align: center;
+}
+
+/* Responsive adjustments for settings */
+@media (max-width: 768px) {
+    .settings-sidebar {
+        margin-bottom: 1rem;
+    }
+    
+    .settings-sidebar .nav-pills {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 0.25rem;
+    }
+    
+    .settings-sidebar .nav-link {
+        white-space: nowrap;
+        min-width: auto;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    .settings-sidebar .nav-link:hover {
+        transform: translateY(-2px);
+    }
+} 

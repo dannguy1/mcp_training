@@ -24,6 +24,13 @@ class FeatureConfig(BaseModel):
     temporal: List[str] = Field(default_factory=list, description="Temporal features")
 
 
+class EarlyStoppingConfig(BaseModel):
+    """Early stopping configuration."""
+    enabled: bool = Field(default=True, description="Enable early stopping")
+    patience: int = Field(default=10, description="Early stopping patience")
+    min_delta: float = Field(default=0.001, description="Minimum delta for improvement")
+
+
 class TrainingConfig(BaseModel):
     """Training configuration."""
     test_size: float = Field(default=0.2, description="Test set size")
@@ -31,8 +38,7 @@ class TrainingConfig(BaseModel):
     random_state: int = Field(default=42, description="Random state")
     n_jobs: int = Field(default=-1, description="Number of jobs")
     cross_validation_folds: int = Field(default=5, description="CV folds")
-    early_stopping: bool = Field(default=True, description="Early stopping")
-    patience: int = Field(default=10, description="Early stopping patience")
+    early_stopping: EarlyStoppingConfig = Field(default_factory=EarlyStoppingConfig, description="Early stopping config")
 
 
 class StorageConfig(BaseModel):

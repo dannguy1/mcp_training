@@ -84,6 +84,34 @@ class EvaluationResponse(BaseModel):
 
 
 # Model endpoints
+@router.get("/")
+async def get_models(
+    status: Optional[str] = None,
+    model_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    model_service: ModelService = Depends(get_model_service)
+):
+    """Get list of models.
+    
+    Args:
+        status: Filter by status
+        model_type: Filter by model type
+        limit: Maximum number of models to return
+        offset: Number of models to skip
+        model_service: Model service
+        
+    Returns:
+        List of models
+    """
+    try:
+        # For now, return empty list until model service is fully implemented
+        return []
+    except Exception as e:
+        logger.error(f"Error getting models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
+
+
 @router.get("/list", response_model=ModelList)
 async def list_models(
     status: Optional[str] = None,

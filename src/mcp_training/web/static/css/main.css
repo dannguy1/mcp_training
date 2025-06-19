@@ -1,0 +1,205 @@
+/* Global Styles */
+body {
+    font-family: var(--font-family);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+    color: #213547;
+    background-color: #f8f9fa;
+}
+
+/* Layout - Fixed navbar with full-width main content */
+.navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+main {
+    flex-grow: 1;
+    width: 100%;
+    min-height: calc(100vh - 56px); /* Account for navbar height */
+}
+
+/* Offcanvas Sidebar */
+.offcanvas {
+    width: 250px;
+}
+
+.offcanvas-header {
+    padding: 1rem;
+}
+
+.offcanvas-body {
+    padding: 1rem;
+}
+
+.sidebar-nav .nav-link {
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-normal);
+}
+
+.sidebar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff !important;
+}
+
+.sidebar-nav .nav-link.active {
+    background-color: var(--bs-primary);
+    color: #fff !important;
+}
+
+/* Cards */
+.card {
+    border: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    border-radius: var(--border-radius);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+}
+
+/* Status Cards */
+.status-card {
+    border-left: 4px solid var(--bs-primary);
+}
+
+.status-card.success {
+    border-left-color: var(--bs-success);
+}
+
+.status-card.warning {
+    border-left-color: var(--bs-warning);
+}
+
+.status-card.danger {
+    border-left-color: var(--bs-danger);
+}
+
+.status-card.info {
+    border-left-color: var(--bs-info);
+}
+
+/* Activity List */
+.activity-item {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color var(--transition-fast);
+}
+
+.activity-item:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Loading States */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Buttons */
+.btn {
+    font-weight: var(--font-weight-medium);
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-normal);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+/* Form Controls */
+.form-control:focus,
+.form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Tables */
+.table {
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Progress Bars */
+.progress {
+    height: 0.5rem;
+    border-radius: var(--border-radius);
+}
+
+/* Alerts */
+.alert {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .card-deck {
+        flex-direction: column;
+    }
+    
+    .card-deck .card {
+        margin-bottom: 1rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+
+/* Utility Classes */
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.transition-all {
+    transition: all var(--transition-normal);
+} 

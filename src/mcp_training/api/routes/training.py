@@ -95,8 +95,9 @@ async def start_training(
         # Start training job
         training_id = await training_service.start_training(
             export_file=str(export_path),
-            model_config=request.model_cfg,
-            training_config=request.training_config
+            model_type=request.model_cfg.get("type", "isolation_forest") if request.model_cfg else "isolation_forest",
+            model_name=request.model_cfg.get("name") if request.model_cfg else None,
+            config_overrides=request.training_config
         )
         
         logger.info(f"Training job started: {training_id}")
@@ -158,8 +159,9 @@ async def upload_and_train(
         # Start training job
         training_id = await training_service.start_training(
             export_file=str(stored_path),
-            model_config=model_cfg,
-            training_config=training_config
+            model_type=model_cfg.get("type", "isolation_forest") if model_cfg else "isolation_forest",
+            model_name=model_cfg.get("name") if model_cfg else None,
+            config_overrides=training_config
         )
         
         logger.info(f"Upload and training job started: {training_id}")
@@ -193,7 +195,7 @@ async def get_training_status(
         Training status
     """
     try:
-        status = await training_service.get_training_status(training_id)
+        status = training_service.get_training_status(training_id)
         
         if not status:
             raise HTTPException(status_code=404, detail=f"Training job not found: {training_id}")
@@ -351,4 +353,104 @@ async def get_training_stats(
         
     except Exception as e:
         logger.error(f"Error getting training stats: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get training stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get training stats: {str(e)}")
+
+
+@router.get("/exports")
+async def list_export_files(
+    storage_service: StorageService = Depends(get_storage_service)
+):
+    """Get list of available export files.
+    
+    Args:
+        storage_service: Storage service
+        
+    Returns:
+        List of export files
+    """
+    try:
+        exports = storage_service.list_exports()
+        return exports
+    except Exception as e:
+        logger.error(f"Error listing export files: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list export files: {str(e)}")
+
+
+@router.get("/jobs")
+async def get_training_jobs(
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    training_service: TrainingService = Depends(get_training_service)
+):
+    """Get list of training jobs."""
+    try:
+        jobs_dict = training_service.list_training_tasks()
+        jobs = list(jobs_dict.values())
+        # Optionally filter by status
+        if status:
+            jobs = [job for job in jobs if job.get('status') == status]
+        # Apply offset and limit
+        jobs = jobs[offset:offset+limit]
+        return jobs
+    except Exception as e:
+        logger.error(f"Error getting training jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get training jobs: {str(e)}")
+
+
+@router.post("/jobs", response_model=TrainingResponse)
+async def create_training_job(
+    request: TrainingRequest,
+    background_tasks: BackgroundTasks,
+    training_service: TrainingService = Depends(get_training_service),
+    storage_service: StorageService = Depends(get_storage_service)
+):
+    """Create a new training job.
+    
+    Args:
+        request: Training request
+        background_tasks: Background tasks
+        training_service: Training service
+        storage_service: Storage service
+        
+    Returns:
+        Training response with job ID
+    """
+    try:
+        logger.info(f"Creating training job for export: {request.export_file}")
+        
+        # Validate export file
+        export_path = Path(request.export_file)
+        if not export_path.exists():
+            raise HTTPException(status_code=404, detail=f"Export file not found: {request.export_file}")
+        
+        # Validate file extension
+        if not validate_file_extension(export_path, ["json"]):
+            raise HTTPException(status_code=400, detail="Export file must be a JSON file")
+        
+        # Validate file size (max 100MB)
+        if not validate_file_size(export_path, 100):
+            raise HTTPException(status_code=400, detail="Export file too large (max 100MB)")
+        
+        # Start training job
+        training_id = await training_service.start_training(
+            export_file=str(export_path),
+            model_type=request.model_cfg.get("type", "isolation_forest") if request.model_cfg else "isolation_forest",
+            model_name=request.model_cfg.get("name") if request.model_cfg else None,
+            config_overrides=request.training_config
+        )
+        
+        logger.info(f"Training job created: {training_id}")
+        
+        return TrainingResponse(
+            training_id=training_id,
+            status="started",
+            message="Training job created successfully",
+            created_at=datetime.now()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating training job: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create training job: {str(e)}") 
