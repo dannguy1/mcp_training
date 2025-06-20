@@ -49,6 +49,10 @@ def setup_cors(
             "X-Process-Time"
         ]
     
+    # Debug logging
+    logger.info(f"CORS configuration: origins={allowed_origins}, methods={allowed_methods}, headers={allowed_headers}")
+    logger.info(f"CORS allow_credentials={allow_credentials}, max_age={max_age}")
+    
     # Add CORS middleware
     app.add_middleware(
         FastAPICORSMiddleware,

@@ -22,7 +22,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 
-from .config import config
+from .config import get_global_config
 from .feature_extractor import WiFiFeatureExtractor
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class ModelTrainer:
         self.model = None
         self.scaler = StandardScaler()
         self.feature_extractor = WiFiFeatureExtractor()
+        config = get_global_config()
         self.model_params = config.get_model_params(model_type)
         self.training_params = config.get_training_params()
         self.evaluation_params = config.get_evaluation_params()
@@ -159,6 +160,7 @@ class ModelTrainer:
     
     def _save_model(self, model_name: str, feature_names: List[str]) -> Path:
         """Save the trained model and metadata."""
+        config = get_global_config()
         models_dir = Path(config.models_dir)
         models_dir.mkdir(parents=True, exist_ok=True)
         
@@ -269,6 +271,7 @@ class ModelTrainer:
     
     def list_models(self) -> List[Dict[str, Any]]:
         """List all available trained models."""
+        config = get_global_config()
         models_dir = Path(config.models_dir)
         if not models_dir.exists():
             return []
@@ -296,6 +299,7 @@ class ModelTrainer:
     
     def delete_model(self, model_name: str) -> bool:
         """Delete a trained model."""
+        config = get_global_config()
         model_dir = Path(config.models_dir) / model_name
         
         if not model_dir.exists():

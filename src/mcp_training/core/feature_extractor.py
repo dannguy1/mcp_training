@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict, Counter
 import logging
 
-from .config import config
+from .config import get_global_config
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ class WiFiFeatureExtractor:
     
     def __init__(self, feature_config: Optional[Dict[str, Any]] = None):
         """Initialize the feature extractor."""
+        config = get_global_config()
         self.feature_config = feature_config or config.get_feature_config()
         self.mac_pattern = re.compile(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})')
         self.ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')

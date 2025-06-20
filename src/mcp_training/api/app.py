@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from ..core.config import get_config, config as core_config
+from ..core.config import get_config, get_global_config as core_config
 from ..utils.logger import setup_logging, get_logger
 from ..services.training_service import TrainingService
 from ..services.model_service import ModelService
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         config = get_config()
         
         # Load model config from YAML
-        model_config_data = core_config.model_config_data
+        model_config_data = core_config().model_config_data
         model_config = ModelConfig(**model_config_data)
         
         # Setup logging
@@ -121,8 +121,13 @@ def setup_middleware(app: FastAPI, config: dict):
     """
     logger = get_logger(__name__)
     
+    # Debug logging for config
+    logger.info(f"Setting up middleware with config: {config}")
+    
     # CORS middleware
     cors_config = config.get("cors", {})
+    logger.info(f"CORS config from config dict: {cors_config}")
+    
     setup_cors(
         app,
         allowed_origins=cors_config.get("allowed_origins"),

@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import logging
 
-from .config import config
+from .config import get_global_config
 
 logger = logging.getLogger(__name__)
 

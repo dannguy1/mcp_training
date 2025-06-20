@@ -3,11 +3,16 @@ Configuration management for MCP Training Service.
 """
 
 import os
-from pathlib import Path
-from typing import Dict, Any, Optional, List
 import yaml
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, validator
+from dotenv import load_dotenv
+from ..utils.logger import get_logger
+
+# Load .env file at module level
+load_dotenv()
 
 
 class TrainingConfig(BaseSettings):
@@ -67,7 +72,7 @@ class TrainingConfig(BaseSettings):
     # Security settings
     auth_enabled: bool = Field(default=False, env="TRAINING_AUTH_ENABLED")
     api_key: str = Field(default="", env="TRAINING_API_KEY")
-    cors_origins: str = Field(default="http://localhost:3000,https://example.com", env="TRAINING_CORS_ORIGINS")
+    cors_origins: str = Field(default="*", env="TRAINING_CORS_ORIGINS")
     rate_limit: int = Field(default=100, env="TRAINING_RATE_LIMIT")
     https_only: bool = Field(default=False, env="TRAINING_HTTPS_ONLY")
     secure_headers: bool = Field(default=True, env="TRAINING_SECURE_HEADERS")
@@ -79,8 +84,6 @@ class TrainingConfig(BaseSettings):
     
     # Pydantic v2 config
     model_config = dict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra='allow'
     )
@@ -89,10 +92,19 @@ class TrainingConfig(BaseSettings):
         super().__init__(**kwargs)
         self._model_config: Optional[Dict[str, Any]] = None
         self._training_config: Optional[Dict[str, Any]] = None
+        
+        # Manually override cors_origins if environment variable is set
+        env_cors_origins = os.getenv('TRAINING_CORS_ORIGINS')
+        if env_cors_origins and env_cors_origins != self.cors_origins:
+            self.cors_origins = env_cors_origins
     
     def get_cors_origins_list(self) -> List[str]:
         """Get CORS origins as a list."""
         if isinstance(self.cors_origins, str):
+            # Handle wildcard case
+            if self.cors_origins.strip() == "*":
+                return ["*"]
+            # Handle comma-separated list
             return [origin.strip() for origin in self.cors_origins.split(',') if origin.strip()]
         return []
     
@@ -405,10 +417,26 @@ class TrainingConfig(BaseSettings):
         return Path.cwd() / relative_path
 
 
-# Global configuration instance
-config = TrainingConfig()
+# Global configuration instance - lazy loaded
+_config = None
+
+def get_global_config():
+    """Get the global configuration instance, creating it if necessary."""
+    global _config
+    if _config is None:
+        _config = TrainingConfig()
+    return _config
 
 def get_config():
+    logger = get_logger(__name__)
+    
+    # Get the global config instance
+    config = get_global_config()
+    
+    # Debug logging for CORS config
+    cors_origins = config.get_cors_origins_list()
+    logger.info(f"Loading CORS configuration from environment: TRAINING_CORS_ORIGINS='{config.cors_origins}' -> parsed as {cors_origins}")
+    
     return {
         "logging": {
             "level": config.log_level,
@@ -421,7 +449,7 @@ def get_config():
             "logs_dir": config.logs_dir
         },
         "cors": {
-            "allowed_origins": config.get_cors_origins_list(),
+            "allowed_origins": cors_origins,
             "allowed_methods": ["*"],
             "allowed_headers": ["*"],
             "allow_credentials": True

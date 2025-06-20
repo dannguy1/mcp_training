@@ -9,32 +9,32 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-from .core.config import config
+from .core.config import get_global_config
 from .core.feature_extractor import WiFiFeatureExtractor
 from .core.model_trainer import ModelTrainer
 from .core.export_validator import ExportValidator
 
 # Set up logging
 logging.basicConfig(
-    level=getattr(logging, config.log_level),
+    level=getattr(logging, get_global_config().log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(version=config.service_version)
+@click.version_option(version=get_global_config().service_version)
 @click.option('--debug', is_flag=True, help='Enable debug mode')
 def cli(debug):
     """MCP Training Service CLI"""
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
-        config.debug = True
+        get_global_config().debug = True
 
 
 @cli.command()
 @click.argument('export_file', type=click.Path(exists=True))
-@click.option('--model-type', default=config.default_model_type, 
+@click.option('--model-type', default=get_global_config().default_model_type, 
               help='Type of model to train')
 @click.option('--output-name', help='Name for the trained model')
 @click.option('--validate-only', is_flag=True, help='Only validate the export file')
@@ -146,7 +146,7 @@ def validate(export_file: str):
 
 
 @cli.command()
-@click.option('--export-dir', default=config.exports_dir, 
+@click.option('--export-dir', default=get_global_config().exports_dir, 
               help='Directory containing export files')
 def validate_all(export_dir: str):
     """Validate all export files in a directory."""
@@ -237,7 +237,7 @@ def predict(export_file: str, model_name: str):
     try:
         # Load model
         trainer = ModelTrainer()
-        model_path = Path(config.models_dir) / model_name
+        model_path = Path(get_global_config().models_dir) / model_name
         
         if not model_path.exists():
             click.echo(f"❌ Model '{model_name}' not found")
@@ -297,17 +297,17 @@ def predict(export_file: str, model_name: str):
 def info():
     """Show system information."""
     try:
-        click.echo(f"🤖 MCP Training Service v{config.service_version}")
-        click.echo(f"📁 Models directory: {config.models_dir}")
-        click.echo(f"📁 Exports directory: {config.exports_dir}")
-        click.echo(f"📁 Logs directory: {config.logs_dir}")
-        click.echo(f"🔧 Default model type: {config.default_model_type}")
-        click.echo(f"⚙️  Debug mode: {config.debug}")
+        click.echo(f"🤖 MCP Training Service v{get_global_config().service_version}")
+        click.echo(f"📁 Models directory: {get_global_config().models_dir}")
+        click.echo(f"📁 Exports directory: {get_global_config().exports_dir}")
+        click.echo(f"📁 Logs directory: {get_global_config().logs_dir}")
+        click.echo(f"🔧 Default model type: {get_global_config().default_model_type}")
+        click.echo(f"⚙️  Debug mode: {get_global_config().debug}")
         
         # Check directories
-        models_path = Path(config.models_dir)
-        exports_path = Path(config.exports_dir)
-        logs_path = Path(config.logs_dir)
+        models_path = Path(get_global_config().models_dir)
+        exports_path = Path(get_global_config().exports_dir)
+        logs_path = Path(get_global_config().logs_dir)
         
         click.echo(f"\n📂 Directory Status:")
         click.echo(f"  Models: {'✅' if models_path.exists() else '❌'} {models_path}")

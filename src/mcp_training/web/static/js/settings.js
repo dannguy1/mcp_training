@@ -96,7 +96,7 @@ class SettingsManager {
     async loadSettings() {
         try {
             utils.showLoading();
-            const settings = await utils.apiCall('/settings');
+            const settings = await utils.apiCall('/api/settings');
             this.settings = settings;
             this.originalSettings = JSON.parse(JSON.stringify(settings));
             this.populateSettingsForms();
@@ -177,7 +177,7 @@ class SettingsManager {
             
             const settings = this.collectSettingsFromForms();
             
-            await utils.apiCall('/settings', {
+            await utils.apiCall('/api/settings', {
                 method: 'PUT',
                 body: JSON.stringify(settings),
                 headers: { 'Content-Type': 'application/json' }
