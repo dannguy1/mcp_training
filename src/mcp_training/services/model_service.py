@@ -144,7 +144,7 @@ class ModelService:
             return False
     
     def deploy_model(self, version: str, deployed_by: Optional[str] = None) -> bool:
-        """Deploy a model (mark as deployed).
+        """Deploy a model (mark as deployed and create deployment package).
         
         Args:
             version: Model version to deploy
@@ -154,43 +154,556 @@ class ModelService:
             True if successful, False otherwise
         """
         try:
+            # First, mark as deployed in registry
             success = self.registry.deploy_model(version, deployed_by)
-            if success:
-                logger.info(f"Model {version} deployed successfully")
+            if not success:
+                return False
+            
+            # Create deployment package
+            deployment_package_path = self._create_deployment_package(version)
+            if not deployment_package_path:
+                logger.error(f"Failed to create deployment package for {version}")
+                return False
+            
+            logger.info(f"Model {version} deployed successfully. Package: {deployment_package_path}")
+            
+            # Broadcast model ready notification via WebSocket
+            try:
+                import asyncio
+                from ..api.routes.websocket import broadcast_model_ready
                 
-                # Broadcast model ready notification via WebSocket
+                # Create async task to broadcast
+                async def broadcast():
+                    await broadcast_model_ready(
+                        model_id=version,
+                        deployed_by=deployed_by,
+                        deployed_at=datetime.now().isoformat(),
+                        deployment_package=str(deployment_package_path)
+                    )
+                
+                # Run in event loop if available
                 try:
-                    import asyncio
-                    from ..api.routes.websocket import broadcast_model_ready
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(broadcast())
+                    else:
+                        loop.run_until_complete(broadcast())
+                except RuntimeError:
+                    # No event loop, skip broadcasting
+                    pass
                     
-                    # Create async task to broadcast
-                    async def broadcast():
-                        await broadcast_model_ready(
-                            model_id=version,
-                            deployed_by=deployed_by,
-                            deployed_at=datetime.now().isoformat()
-                        )
-                    
-                    # Run in event loop if available
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.create_task(broadcast())
-                        else:
-                            loop.run_until_complete(broadcast())
-                    except RuntimeError:
-                        # No event loop, skip broadcasting
-                        pass
-                        
-                except ImportError:
-                    logger.warning("WebSocket broadcasting not available")
-                except Exception as e:
-                    logger.error(f"Failed to broadcast model ready: {e}")
-                    
-            return success
+            except ImportError:
+                logger.warning("WebSocket broadcasting not available")
+            except Exception as e:
+                logger.error(f"Failed to broadcast model ready: {e}")
+                
+            return True
         except Exception as e:
             logger.error(f"Error deploying model {version}: {e}")
             return False
+    
+    def _create_deployment_package(self, version: str) -> Optional[Path]:
+        """Create a deployment package for a model following industry best practices.
+        
+        Args:
+            version: Model version
+            
+        Returns:
+            Path to deployment package or None if failed
+        """
+        try:
+            import zipfile
+            import json
+            import hashlib
+            
+            # Get model directory
+            model_dir = self.models_dir / version
+            if not model_dir.exists():
+                logger.error(f"Model directory not found: {model_dir}")
+                return None
+            
+            # Create deployments directory
+            deployments_dir = self.models_dir / "deployments"
+            deployments_dir.mkdir(exist_ok=True)
+            
+            # Create deployment package path
+            package_name = f"model_{version}_deployment.zip"
+            package_path = deployments_dir / package_name
+            
+            # Load model metadata
+            metadata = self.registry.get_model(version)
+            if not metadata:
+                logger.error(f"Failed to load metadata for {version}")
+                return None
+            
+            # Calculate file hashes for integrity verification
+            model_file = model_dir / "model.joblib"
+            scaler_file = model_dir / "scaler.joblib"
+            metadata_file = model_dir / "metadata.json"
+            
+            file_hashes = {}
+            if model_file.exists():
+                with open(model_file, 'rb') as f:
+                    file_hashes['model.joblib'] = hashlib.sha256(f.read()).hexdigest()
+            if scaler_file.exists():
+                with open(scaler_file, 'rb') as f:
+                    file_hashes['scaler.joblib'] = hashlib.sha256(f.read()).hexdigest()
+            if metadata_file.exists():
+                with open(metadata_file, 'rb') as f:
+                    file_hashes['metadata.json'] = hashlib.sha256(f.read()).hexdigest()
+            
+            # Create comprehensive deployment manifest
+            deployment_manifest = {
+                "model_version": version,
+                "deployment_timestamp": datetime.now().isoformat(),
+                "package_format_version": "1.0",
+                "model_info": {
+                    "model_type": metadata.model_info.model_type,
+                    "training_source": metadata.model_info.training_source,
+                    "training_id": metadata.model_info.training_id,
+                    "export_file": metadata.model_info.export_file
+                },
+                "training_info": {
+                    "training_samples": metadata.training_info.training_samples,
+                    "feature_names": metadata.training_info.feature_names,
+                    "feature_count": len(metadata.training_info.feature_names),
+                    "export_file_size": metadata.training_info.export_file_size,
+                    "training_duration": metadata.training_info.training_duration,
+                    "model_parameters": metadata.training_info.model_parameters
+                },
+                "evaluation_info": {
+                    "basic_metrics": metadata.evaluation_info.basic_metrics,
+                    "cross_validation_score": metadata.evaluation_info.cross_validation_score,
+                    "feature_importance": metadata.evaluation_info.feature_importance
+                },
+                "deployment_info": {
+                    "status": "deployed",
+                    "deployed_at": metadata.deployment_info.deployed_at,
+                    "deployed_by": metadata.deployment_info.deployed_by
+                },
+                "files": {
+                    "model_file": "model.joblib",
+                    "scaler_file": "scaler.joblib",
+                    "metadata_file": "metadata.json",
+                    "validation_script": "validate_model.py",
+                    "inference_example": "inference_example.py",
+                    "requirements": "requirements.txt"
+                },
+                "file_integrity": file_hashes,
+                "inference_config": {
+                    "threshold": metadata.evaluation_info.basic_metrics.get("threshold_value", 0.5),
+                    "anomaly_ratio": metadata.evaluation_info.basic_metrics.get("anomaly_ratio", 0.1),
+                    "score_percentile": 90,
+                    "batch_size": 1000,
+                    "timeout_seconds": 30
+                },
+                "model_artifacts": {
+                    "model_size_bytes": model_file.stat().st_size if model_file.exists() else 0,
+                    "scaler_size_bytes": scaler_file.stat().st_size if scaler_file.exists() else 0,
+                    "total_package_size": 0  # Will be updated after creation
+                }
+            }
+            
+            # Create deployment package
+            with zipfile.ZipFile(package_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add model files
+                if model_file.exists():
+                    zipf.write(model_file, "model.joblib")
+                
+                if scaler_file.exists():
+                    zipf.write(scaler_file, "scaler.joblib")
+                
+                # Add metadata
+                if metadata_file.exists():
+                    zipf.write(metadata_file, "metadata.json")
+                
+                # Add deployment manifest
+                manifest_content = json.dumps(deployment_manifest, indent=2)
+                zipf.writestr("deployment_manifest.json", manifest_content)
+                
+                # Add model validation script
+                validation_script = f"""#!/usr/bin/env python3
+\"\"\"
+Model Validation Script for {version}
+Validates model integrity and basic functionality.
+\"\"\"
+
+import sys
+import json
+import hashlib
+import joblib
+import numpy as np
+from pathlib import Path
+
+def calculate_file_hash(filepath):
+    \"\"\"Calculate SHA256 hash of a file.\"\"\"
+    with open(filepath, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+def validate_model():
+    \"\"\"Validate the deployed model.\"\"\"
+    print("🔍 Validating model deployment...")
+    
+    # Load deployment manifest
+    with open('deployment_manifest.json', 'r') as f:
+        manifest = json.load(f)
+    
+    # Validate file integrity
+    print("📁 Checking file integrity...")
+    for filename, expected_hash in manifest['file_integrity'].items():
+        if Path(filename).exists():
+            actual_hash = calculate_file_hash(filename)
+            if actual_hash == expected_hash:
+                print(f"✅ {filename}: OK")
+            else:
+                print(f"❌ {filename}: Hash mismatch!")
+                return False
+        else:
+            print(f"⚠️  {filename}: File not found")
+    
+    # Load and validate model
+    print("🤖 Loading model...")
+    try:
+        model = joblib.load('model.joblib')
+        print("✅ Model loaded successfully")
+    except Exception as e:
+        print(f"❌ Failed to load model: {{e}}")
+        return False
+    
+    # Load scaler if available
+    scaler = None
+    if Path('scaler.joblib').exists():
+        try:
+            scaler = joblib.load('scaler.joblib')
+            print("✅ Scaler loaded successfully")
+        except Exception as e:
+            print(f"⚠️  Failed to load scaler: {{e}}")
+    
+    # Test with sample data
+    print("🧪 Testing model inference...")
+    try:
+        feature_names = manifest['training_info']['feature_names']
+        n_features = len(feature_names)
+        
+        # Create sample data
+        sample_data = np.random.randn(10, n_features)
+        
+        # Scale if scaler is available
+        if scaler:
+            sample_data = scaler.transform(sample_data)
+        
+        # Make predictions
+        scores = -model.score_samples(sample_data)
+        predictions = (scores > manifest['inference_config']['threshold']).astype(int)
+        
+        print(f"✅ Inference test successful")
+        print(f"   Sample predictions: {{predictions[:5]}}")
+        print(f"   Score range: {{scores.min():.3f}} to {{scores.max():.3f}}")
+        
+    except Exception as e:
+        print(f"❌ Inference test failed: {{e}}")
+        return False
+    
+    print("🎉 Model validation completed successfully!")
+    return True
+
+if __name__ == "__main__":
+    success = validate_model()
+    sys.exit(0 if success else 1)
+"""
+                zipf.writestr("validate_model.py", validation_script)
+                
+                # Add inference example
+                inference_example = f"""#!/usr/bin/env python3
+\"\"\"
+Inference Example for Model {version}
+Demonstrates how to use the deployed model for predictions.
+\"\"\"
+
+import joblib
+import numpy as np
+import json
+from pathlib import Path
+from typing import List, Dict, Any
+
+class ModelInference:
+    def __init__(self, model_dir: str = "."):
+        \"\"\"Initialize model inference.\"\"\"
+        self.model_dir = Path(model_dir)
+        
+        # Load deployment manifest
+        with open(self.model_dir / 'deployment_manifest.json', 'r') as f:
+            self.manifest = json.load(f)
+        
+        # Load model and scaler
+        self.model = joblib.load(self.model_dir / 'model.joblib')
+        self.scaler = None
+        if (self.model_dir / 'scaler.joblib').exists():
+            self.scaler = joblib.load(self.model_dir / 'scaler.joblib')
+        
+        # Get configuration
+        self.threshold = self.manifest['inference_config']['threshold']
+        self.feature_names = self.manifest['training_info']['feature_names']
+    
+    def preprocess_features(self, features: List[Dict[str, Any]]) -> np.ndarray:
+        \"\"\"Preprocess input features.\"\"\"
+        # Convert to numpy array
+        feature_array = []
+        for feature_dict in features:
+            feature_vector = []
+            for feature_name in self.feature_names:
+                feature_vector.append(feature_dict.get(feature_name, 0.0))
+            feature_array.append(feature_vector)
+        
+        return np.array(feature_array)
+    
+    def predict(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        \"\"\"Make predictions on input features.\"\"\"
+        # Preprocess features
+        X = self.preprocess_features(features)
+        
+        # Scale features if scaler is available
+        if self.scaler:
+            X = self.scaler.transform(X)
+        
+        # Make predictions
+        scores = -self.model.score_samples(X)
+        predictions = (scores > self.threshold).astype(int)
+        
+        return {{
+            'predictions': predictions.tolist(),
+            'scores': scores.tolist(),
+            'threshold': self.threshold,
+            'anomaly_count': int(predictions.sum()),
+            'total_samples': len(predictions)
+        }}
+
+def main():
+    \"\"\"Example usage.\"\"\"
+    # Initialize inference
+    inference = ModelInference()
+    
+    # Example features (replace with your actual data)
+    sample_features = [
+        {{
+            'auth_failure_ratio': 0.1,
+            'deauth_ratio': 0.05,
+            'beacon_ratio': 0.3,
+            'unique_mac_count': 15,
+            'unique_ssid_count': 8,
+            'mean_signal_strength': -45.0,
+            'std_signal_strength': 5.0,
+            'mean_data_rate': 54.0,
+            'mean_packet_loss': 0.02,
+            'error_ratio': 0.01,
+            'warning_ratio': 0.03,
+            'mean_hour_of_day': 14.0,
+            'mean_day_of_week': 3.0,
+            'mean_time_between_events': 120.0,
+            'total_devices': 25,
+            'max_device_activity': 0.8,
+            'mean_device_activity': 0.4
+        }}
+    ]
+    
+    # Make prediction
+    result = inference.predict(sample_features)
+    
+    print("🔍 Model Inference Example")
+    print(f"Model Version: {{inference.manifest['model_version']}}")
+    print(f"Threshold: {{result['threshold']}}")
+    print(f"Predictions: {{result['predictions']}}")
+    print(f"Scores: {{result['scores']}}")
+    print(f"Anomalies detected: {{result['anomaly_count']}}/{{result['total_samples']}}")
+
+if __name__ == "__main__":
+    main()
+"""
+                zipf.writestr("inference_example.py", inference_example)
+                
+                # Add requirements.txt
+                requirements = """# Model inference requirements
+joblib>=1.3.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+pandas>=1.3.0
+
+# Optional: for advanced features
+# scipy>=1.7.0
+# matplotlib>=3.5.0
+# seaborn>=0.11.0
+"""
+                zipf.writestr("requirements.txt", requirements)
+                
+                # Add comprehensive README
+                readme_content = f"""# Model Deployment Package
+
+## Model Information
+- **Version**: {version}
+- **Type**: {metadata.model_info.model_type}
+- **Training Samples**: {metadata.training_info.training_samples:,}
+- **Features**: {len(metadata.training_info.feature_names)}
+- **Deployed At**: {metadata.deployment_info.deployed_at}
+- **Training Duration**: {metadata.training_info.training_duration:.2f}s (if available)
+
+## Package Contents
+
+### Core Files
+- `model.joblib` - Trained model file
+- `scaler.joblib` - Feature scaler (if applicable)
+- `metadata.json` - Complete model metadata
+- `deployment_manifest.json` - Deployment configuration and integrity checks
+
+### Validation & Examples
+- `validate_model.py` - Model validation script
+- `inference_example.py` - Usage example
+- `requirements.txt` - Python dependencies
+
+## Quick Start
+
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Validate Model
+```bash
+python validate_model.py
+```
+
+### 3. Run Inference Example
+```bash
+python inference_example.py
+```
+
+## Production Integration
+
+### Using the ModelInference Class
+```python
+from inference_example import ModelInference
+
+# Initialize
+inference = ModelInference()
+
+# Prepare features (must match training feature names)
+features = [
+    {{
+        'auth_failure_ratio': 0.1,
+        'deauth_ratio': 0.05,
+        # ... all other features
+    }}
+]
+
+# Make predictions
+result = inference.predict(features)
+print(f"Anomalies: {{result['anomaly_count']}}/{{result['total_samples']}}")
+```
+
+### API Integration Example
+```python
+from flask import Flask, request, jsonify
+from inference_example import ModelInference
+
+app = Flask(__name__)
+inference = ModelInference()
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    features = request.json['features']
+    result = inference.predict(features)
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+## Model Configuration
+
+### Inference Settings
+- **Threshold**: {metadata.evaluation_info.basic_metrics.get("threshold_value", 0.5)}
+- **Anomaly Ratio**: {metadata.evaluation_info.basic_metrics.get("anomaly_ratio", 0.1)}
+- **Score Percentile**: 90
+- **Batch Size**: 1000
+- **Timeout**: 30 seconds
+
+### Feature Names
+{chr(10).join([f"- {feature}" for feature in metadata.training_info.feature_names])}
+
+## Performance Metrics
+
+### Training Performance
+{chr(10).join([f"- **{k}**: {v}" for k, v in metadata.evaluation_info.basic_metrics.items()])}
+
+### Model Parameters
+```json
+{json.dumps(metadata.training_info.model_parameters, indent=2)}
+```
+
+## Security & Integrity
+
+### File Integrity
+All files include SHA256 hashes for integrity verification:
+- Run `python validate_model.py` to verify
+- Check `deployment_manifest.json` for expected hashes
+
+### Model Validation
+The validation script checks:
+- File integrity (hash verification)
+- Model loading capability
+- Basic inference functionality
+- Feature compatibility
+
+## Troubleshooting
+
+### Common Issues
+1. **Import Errors**: Install requirements with `pip install -r requirements.txt`
+2. **Feature Mismatch**: Ensure input features match the feature names exactly
+3. **Memory Issues**: Reduce batch size in inference configuration
+4. **Performance**: Consider model optimization or hardware upgrades
+
+### Support
+For issues with this model deployment:
+- Check the validation script output
+- Review the deployment manifest for configuration
+- Contact your ML team with the model version: {version}
+
+## Model Lifecycle
+
+### Version History
+- **Current**: {version}
+- **Training ID**: {metadata.model_info.training_id or 'N/A'}
+- **Source**: {metadata.model_info.export_file or 'N/A'}
+
+### Monitoring
+Monitor model performance in production:
+- Prediction accuracy
+- Feature drift detection
+- Performance metrics
+- Error rates
+
+### Updates
+When deploying model updates:
+1. Validate new model with `validate_model.py`
+2. Test with production-like data
+3. A/B test if possible
+4. Monitor performance after deployment
+"""
+                zipf.writestr("README.md", readme_content)
+            
+            # Update package size in manifest
+            package_size = package_path.stat().st_size
+            deployment_manifest["model_artifacts"]["total_package_size"] = package_size
+            
+            # Update the manifest in the ZIP with final size
+            with zipfile.ZipFile(package_path, 'a') as zipf:
+                zipf.writestr("deployment_manifest.json", json.dumps(deployment_manifest, indent=2))
+            
+            logger.info(f"Deployment package created: {package_path} ({package_size:,} bytes)")
+            return package_path
+            
+        except Exception as e:
+            logger.error(f"Error creating deployment package for {version}: {e}")
+            return None
     
     def get_latest_model(self) -> Optional[ModelMetadata]:
         """Get the latest trained model.

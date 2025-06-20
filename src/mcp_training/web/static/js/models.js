@@ -151,6 +151,12 @@ class ModelsManager {
                                 <i class="bi bi-rocket"></i>
                             </button>
                         ` : ''}
+                        ${model.status === 'deployed' ? `
+                            <button class="btn btn-outline-primary" onclick="modelsManager.downloadDeploymentPackage('${model.id}')" 
+                                    title="Download Deployment Package">
+                                <i class="bi bi-box-arrow-down"></i>
+                            </button>
+                        ` : ''}
                         <button class="btn btn-outline-secondary" onclick="modelsManager.downloadModel('${model.id}')" 
                                 title="Download Model">
                             <i class="bi bi-download"></i>
@@ -317,29 +323,20 @@ class ModelsManager {
     
     async deployModel(modelId) {
         try {
-            const deploymentName = prompt('Enter deployment name:');
-            if (!deploymentName) return;
-            
-            const deploymentConfig = {
-                name: deploymentName,
-                environment: 'production',
-                replicas: 2,
-                resources: {
-                    cpu: '500m',
-                    memory: '1Gi'
-                }
-            };
+            utils.showLoading();
             
             await utils.apiCall(`/models/${modelId}/deploy`, {
                 method: 'POST',
-                body: JSON.stringify(deploymentConfig),
+                body: JSON.stringify({ deployed_by: 'user' }),
                 headers: { 'Content-Type': 'application/json' }
             });
             
-            utils.showSuccess('Model deployed successfully');
+            utils.showSuccess('Model deployed successfully! Deployment package created.');
             this.loadModels();
         } catch (error) {
             utils.showError('Failed to deploy model', error);
+        } finally {
+            utils.hideLoading();
         }
     }
     
@@ -355,6 +352,27 @@ class ModelsManager {
             }
         } catch (error) {
             utils.showError('Failed to download model', error);
+        }
+    }
+    
+    async downloadDeploymentPackage(modelId) {
+        try {
+            utils.showLoading();
+            
+            const response = await fetch(`${API_BASE}/models/${modelId}/deployment-package`);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                utils.downloadFile(url, `model_${modelId}_deployment.zip`);
+                utils.showSuccess('Deployment package downloaded successfully');
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to download deployment package');
+            }
+        } catch (error) {
+            utils.showError('Failed to download deployment package', error);
+        } finally {
+            utils.hideLoading();
         }
     }
     
@@ -463,6 +481,7 @@ class ModelsManager {
         // Setup action buttons
         const deployBtn = document.getElementById('deployModelBtn');
         const downloadBtn = document.getElementById('downloadModelBtn');
+        const downloadPackageBtn = document.getElementById('downloadPackageBtn');
         
         if (deployBtn) {
             deployBtn.onclick = () => this.deployModel(model.id);
@@ -471,6 +490,11 @@ class ModelsManager {
         
         if (downloadBtn) {
             downloadBtn.onclick = () => this.downloadModel(model.id);
+        }
+        
+        if (downloadPackageBtn) {
+            downloadPackageBtn.onclick = () => this.downloadDeploymentPackage(model.id);
+            downloadPackageBtn.style.display = model.status === 'deployed' ? 'inline-block' : 'none';
         }
         
         modal.show();

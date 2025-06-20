@@ -280,7 +280,11 @@
                     <i class="bi bi-rocket me-2"></i>
                     Deploy Model
                 </button>
-                <button type="button" class="btn btn-primary" id="downloadModelBtn">
+                <button type="button" class="btn btn-primary" id="downloadPackageBtn">
+                    <i class="bi bi-box-arrow-down me-2"></i>
+                    Download Package
+                </button>
+                <button type="button" class="btn btn-info" id="downloadModelBtn">
                     <i class="bi bi-download me-2"></i>
                     Download Model
                 </button>
@@ -367,4 +371,10 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', path='/js/models.js') }}"></script>
+<script>
+    // Initialize Models Manager
+    document.addEventListener('DOMContentLoaded', function() {
+        window.modelsManager = new ModelsManager();
+    });
+</script>
 {% endblock %} 

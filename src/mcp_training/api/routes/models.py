@@ -8,7 +8,7 @@ from pathlib import Path
 import os
 import json
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ConfigDict
 import numpy as np
@@ -18,6 +18,7 @@ from ...services.storage_service import StorageService
 from ...services.deps import get_model_service, get_storage_service
 from ...utils.logger import get_logger
 from ...utils.validation import validate_file_extension, validate_file_size
+from ...models.metadata import ModelInfo, ModelMetadata
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -105,8 +106,64 @@ async def get_models(
         List of models
     """
     try:
-        # For now, return empty list until model service is fully implemented
-        return []
+        models = model_service.list_models()
+        
+        # Apply filters
+        if status:
+            models = [m for m in models if m.get('deployment_status') == status]
+        if model_type:
+            models = [m for m in models if m.get('model_type') == model_type]
+        
+        # Apply pagination
+        total = len(models)
+        models = models[offset:offset + limit]
+        
+        # Convert to ModelInfo format
+        model_list = []
+        for model in models:
+            # Map deployment status to frontend expected status
+            status = model['deployment_status']
+            if status == 'available':
+                status = 'ready'  # Frontend expects 'ready' for available models
+            elif status == 'deployed':
+                status = 'deployed'  # Keep as is
+            else:
+                status = 'ready'  # Default to ready for other statuses
+            
+            model_info = ModelInfo(
+                version=model['version'],
+                name=f"Model {model['version']}",
+                type=model['model_type'],
+                status=status,
+                created_at=model['created_at'],
+                updated_at=model['created_at'],  # Use created_at as updated_at for now
+                deployed_at=None,  # Will be set when deployed
+                deployed_by=None,  # Will be set when deployed
+                metrics=None,  # Could be added later
+                file_size=None  # Could be calculated later
+            )
+            model_list.append(model_info)
+        
+        # Convert to frontend expected format
+        frontend_models = []
+        for model_info in model_list:
+            frontend_model = {
+                'id': model_info.version,  # Use version as ID
+                'name': model_info.name,
+                'version': model_info.version,
+                'type': model_info.type,
+                'status': model_info.status,
+                'created_at': model_info.created_at,
+                'updated_at': model_info.updated_at,
+                'size': model_info.file_size or 0,  # Default to 0 if not available
+                'performance': None,  # Could be added later from metrics
+                'deployed_at': model_info.deployed_at,
+                'deployed_by': model_info.deployed_by
+            }
+            frontend_models.append(frontend_model)
+        
+        return frontend_models
+        
     except Exception as e:
         logger.error(f"Error getting models: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
@@ -137,7 +194,7 @@ async def list_models(
         
         # Apply filters
         if status:
-            models = [m for m in models if m.get('status') == status]
+            models = [m for m in models if m.get('deployment_status') == status]
         if model_type:
             models = [m for m in models if m.get('model_type') == model_type]
         
@@ -145,8 +202,34 @@ async def list_models(
         total = len(models)
         models = models[offset:offset + limit]
         
+        # Convert to ModelInfo format
+        model_list = []
+        for model in models:
+            # Map deployment status to frontend expected status
+            status = model['deployment_status']
+            if status == 'available':
+                status = 'ready'  # Frontend expects 'ready' for available models
+            elif status == 'deployed':
+                status = 'deployed'  # Keep as is
+            else:
+                status = 'ready'  # Default to ready for other statuses
+            
+            model_info = ModelInfo(
+                version=model['version'],
+                name=f"Model {model['version']}",
+                type=model['model_type'],
+                status=status,
+                created_at=model['created_at'],
+                updated_at=model['created_at'],  # Use created_at as updated_at for now
+                deployed_at=None,  # Will be set when deployed
+                deployed_by=None,  # Will be set when deployed
+                metrics=None,  # Could be added later
+                file_size=None  # Could be calculated later
+            )
+            model_list.append(model_info)
+        
         return ModelList(
-            models=[ModelInfo(**model) for model in models],
+            models=model_list,
             total=total
         )
         
@@ -170,12 +253,35 @@ async def get_model(
         Model information
     """
     try:
-        model = model_service.get_model(version)
+        model_metadata = model_service.get_model(version)
         
-        if not model:
+        if not model_metadata:
             raise HTTPException(status_code=404, detail=f"Model not found: {version}")
         
-        return ModelInfo(**model.dict())
+        # Convert ModelMetadata to ModelInfo format
+        # Map deployment status to frontend expected status
+        status = model_metadata.deployment_info.status
+        if status == 'available':
+            status = 'ready'  # Frontend expects 'ready' for available models
+        elif status == 'deployed':
+            status = 'deployed'  # Keep as is
+        else:
+            status = 'ready'  # Default to ready for other statuses
+        
+        model_info = ModelInfo(
+            version=model_metadata.model_info.version,
+            name=f"Model {model_metadata.model_info.version}",
+            type=model_metadata.model_info.model_type,
+            status=status,
+            created_at=model_metadata.model_info.created_at,
+            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
+            deployed_at=model_metadata.deployment_info.deployed_at,
+            deployed_by=model_metadata.deployment_info.deployed_by,
+            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
+            file_size=model_metadata.training_info.export_file_size
+        )
+        
+        return model_info
         
     except HTTPException:
         raise
@@ -257,12 +363,35 @@ async def get_latest_model(
         Latest model information
     """
     try:
-        model = model_service.get_latest_model()
+        model_metadata = model_service.get_latest_model()
         
-        if not model:
+        if not model_metadata:
             raise HTTPException(status_code=404, detail="No models found")
         
-        return ModelInfo(**model.dict())
+        # Convert ModelMetadata to ModelInfo format
+        # Map deployment status to frontend expected status
+        status = model_metadata.deployment_info.status
+        if status == 'available':
+            status = 'ready'  # Frontend expects 'ready' for available models
+        elif status == 'deployed':
+            status = 'deployed'  # Keep as is
+        else:
+            status = 'ready'  # Default to ready for other statuses
+        
+        model_info = ModelInfo(
+            version=model_metadata.model_info.version,
+            name=f"Model {model_metadata.model_info.version}",
+            type=model_metadata.model_info.model_type,
+            status=status,
+            created_at=model_metadata.model_info.created_at,
+            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
+            deployed_at=model_metadata.deployment_info.deployed_at,
+            deployed_by=model_metadata.deployment_info.deployed_by,
+            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
+            file_size=model_metadata.training_info.export_file_size
+        )
+        
+        return model_info
         
     except HTTPException:
         raise
@@ -284,12 +413,35 @@ async def get_deployed_model(
         Deployed model information
     """
     try:
-        model = model_service.get_deployed_model()
+        model_metadata = model_service.get_deployed_model()
         
-        if not model:
+        if not model_metadata:
             raise HTTPException(status_code=404, detail="No deployed model found")
         
-        return ModelInfo(**model.dict())
+        # Convert ModelMetadata to ModelInfo format
+        # Map deployment status to frontend expected status
+        status = model_metadata.deployment_info.status
+        if status == 'available':
+            status = 'ready'  # Frontend expects 'ready' for available models
+        elif status == 'deployed':
+            status = 'deployed'  # Keep as is
+        else:
+            status = 'ready'  # Default to ready for other statuses
+        
+        model_info = ModelInfo(
+            version=model_metadata.model_info.version,
+            name=f"Model {model_metadata.model_info.version}",
+            type=model_metadata.model_info.model_type,
+            status=status,
+            created_at=model_metadata.model_info.created_at,
+            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
+            deployed_at=model_metadata.deployment_info.deployed_at,
+            deployed_by=model_metadata.deployment_info.deployed_by,
+            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
+            file_size=model_metadata.training_info.export_file_size
+        )
+        
+        return model_info
         
     except HTTPException:
         raise
@@ -503,4 +655,36 @@ async def cleanup_old_models(
         
     except Exception as e:
         logger.error(f"Error cleaning up models: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup models: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup models: {str(e)}")
+
+
+@router.get("/{version}/deployment-package")
+async def download_deployment_package(version: str, model_service: ModelService = Depends(get_model_service)):
+    """Download the deployment package for a deployed model."""
+    try:
+        # Check if model exists and is deployed
+        model = model_service.get_model(version)
+        if not model:
+            raise HTTPException(status_code=404, detail=f"Model {version} not found")
+        
+        if model.status != "deployed":
+            raise HTTPException(status_code=400, detail=f"Model {version} is not deployed")
+        
+        # Check if deployment package exists
+        deployments_dir = model_service.models_dir / "deployments"
+        package_name = f"model_{version}_deployment.zip"
+        package_path = deployments_dir / package_name
+        
+        if not package_path.exists():
+            raise HTTPException(status_code=404, detail=f"Deployment package for {version} not found")
+        
+        # Return the file
+        return FileResponse(
+            path=str(package_path),
+            filename=package_name,
+            media_type="application/zip"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download deployment package: {str(e)}") 
