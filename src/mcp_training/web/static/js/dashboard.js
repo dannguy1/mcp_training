@@ -234,6 +234,8 @@ class DashboardManager {
             this.updateTrainingChart(trainingJobs);
             this.updateActivityList(trainingJobs);
             this.updateSystemMetrics(status);
+            this.updateEvaluationStatistics(trainingJobs);
+            this.updateRecentRecommendations(trainingJobs);
         } catch (error) {
             console.error('Failed to update dashboard:', error);
         }
@@ -330,6 +332,115 @@ class DashboardManager {
                 </div>
             </div>
         `).join('');
+    }
+    
+    updateEvaluationStatistics(trainingJobs) {
+        // Filter completed jobs with evaluation results
+        const evaluatedJobs = trainingJobs.filter(job => 
+            job.status === 'completed' && job.evaluation_results
+        );
+        
+        if (evaluatedJobs.length === 0) {
+            // Reset statistics to default values
+            this.updateStatElement('eval_pass_rate', '0%');
+            this.updateStatElement('eval_fail_rate', '0%');
+            this.updateStatElement('avg_accuracy', '0%');
+            this.updateStatElement('avg_f1_score', '0%');
+            return;
+        }
+        
+        // Calculate pass/fail rates
+        const passCount = evaluatedJobs.filter(job => {
+            const eval = job.evaluation_results;
+            return eval.threshold_checks && 
+                   Object.values(eval.threshold_checks).every(check => check.passed);
+        }).length;
+        
+        const failCount = evaluatedJobs.length - passCount;
+        const passRate = ((passCount / evaluatedJobs.length) * 100).toFixed(1);
+        const failRate = ((failCount / evaluatedJobs.length) * 100).toFixed(1);
+        
+        // Calculate average metrics
+        const avgAccuracy = evaluatedJobs.reduce((sum, job) => {
+            return sum + (job.evaluation_results.accuracy || 0);
+        }, 0) / evaluatedJobs.length;
+        
+        const avgF1Score = evaluatedJobs.reduce((sum, job) => {
+            return sum + (job.evaluation_results.f1_score || 0);
+        }, 0) / evaluatedJobs.length;
+        
+        // Update display
+        this.updateStatElement('eval_pass_rate', `${passRate}%`);
+        this.updateStatElement('eval_fail_rate', `${failRate}%`);
+        this.updateStatElement('avg_accuracy', `${(avgAccuracy * 100).toFixed(1)}%`);
+        this.updateStatElement('avg_f1_score', `${(avgF1Score * 100).toFixed(1)}%`);
+    }
+    
+    updateRecentRecommendations(trainingJobs) {
+        const recommendationsContainer = document.getElementById('recentRecommendations');
+        if (!recommendationsContainer) return;
+        
+        // Collect all recommendations from recent completed jobs
+        const allRecommendations = [];
+        const recentCompletedJobs = trainingJobs
+            .filter(job => job.status === 'completed' && job.evaluation_results)
+            .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+            .slice(0, 10);
+        
+        recentCompletedJobs.forEach(job => {
+            if (job.evaluation_results.recommendations) {
+                job.evaluation_results.recommendations.forEach(rec => {
+                    allRecommendations.push({
+                        ...rec,
+                        jobId: job.id,
+                        jobName: job.name || `Job ${job.id}`,
+                        timestamp: job.updated_at
+                    });
+                });
+            }
+        });
+        
+        // Sort by priority and take top 5
+        const sortedRecommendations = allRecommendations
+            .sort((a, b) => {
+                const priorityOrder = { high: 3, medium: 2, low: 1 };
+                return priorityOrder[b.priority] - priorityOrder[a.priority];
+            })
+            .slice(0, 5);
+        
+        if (sortedRecommendations.length === 0) {
+            recommendationsContainer.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-lightbulb fs-1 mb-2"></i>
+                    <p>No recent recommendations</p>
+                </div>
+            `;
+            return;
+        }
+        
+        recommendationsContainer.innerHTML = sortedRecommendations.map(rec => `
+            <div class="recommendation-item ${rec.priority}-priority p-2 mb-2 rounded">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-${rec.priority === 'high' ? 'exclamation-triangle text-warning' : 
+                                     rec.priority === 'medium' ? 'info-circle text-info' : 
+                                     'check-circle text-success'} me-2 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <div class="small fw-semibold">${rec.category}</div>
+                        <div class="small text-muted">${rec.message}</div>
+                        <div class="small text-muted">
+                            <i class="bi bi-gear me-1"></i>${rec.jobName}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    updateStatElement(statName, value) {
+        const element = document.querySelector(`[data-stat="${statName}"]`);
+        if (element) {
+            element.textContent = value;
+        }
     }
     
     updateChartRange(range) {

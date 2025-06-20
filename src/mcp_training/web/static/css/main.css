@@ -202,4 +202,118 @@ main {
 
 .transition-all {
     transition: all var(--transition-normal);
+}
+
+/* Evaluation Results Styles */
+.evaluation-metrics {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+}
+
+.metric-value {
+    font-size: 1.1rem;
+    font-weight: var(--font-weight-semibold);
+    color: var(--bs-primary);
+}
+
+.threshold-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.threshold-check .badge {
+    min-width: 60px;
+    text-align: center;
+}
+
+.feature-importance-bar {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    transition: all var(--transition-normal);
+}
+
+.feature-importance-bar:hover {
+    transform: scaleY(1.1);
+}
+
+.recommendation-item {
+    border-left: 3px solid transparent;
+    transition: all var(--transition-normal);
+}
+
+.recommendation-item:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.recommendation-item.high-priority {
+    border-left-color: var(--bs-warning);
+}
+
+.recommendation-item.medium-priority {
+    border-left-color: var(--bs-info);
+}
+
+.recommendation-item.low-priority {
+    border-left-color: var(--bs-success);
+}
+
+/* Training Report Styles */
+.training-report-section {
+    background-color: #f8f9fa;
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.training-report-section h6 {
+    color: var(--bs-primary);
+    margin-bottom: 0.75rem;
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Enhanced Table Styles */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+    transform: scale(1.001);
+    transition: all var(--transition-normal);
+}
+
+.table-actions .btn-group {
+    opacity: 0.7;
+    transition: opacity var(--transition-normal);
+}
+
+.table-actions .btn-group:hover {
+    opacity: 1;
+}
+
+/* Status Badge Enhancements */
+.badge {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    font-weight: var(--font-weight-medium);
+}
+
+.badge.bg-success {
+    background-color: #198754 !important;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+}
+
+.badge.bg-info {
+    background-color: #0dcaf0 !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
 } 
