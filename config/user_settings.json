@@ -1,0 +1,55 @@
+{
+  "general": {
+    "service_name": "MCP Training Service",
+    "service_version": "1.0.0",
+    "timezone": "America/Los_Angeles",
+    "date_format": "YYYY-MM-DD",
+    "auto_refresh": true,
+    "notifications": true,
+    "version": "1.0.0"
+  },
+  "training": {
+    "max_concurrent_jobs": 3,
+    "default_max_iterations": 1000,
+    "default_learning_rate": 0.01,
+    "job_timeout": 24,
+    "default_config": "[object Object]"
+  },
+  "storage": {
+    "models_dir": "models",
+    "exports_dir": "exports",
+    "logs_dir": "logs",
+    "max_storage_gb": 10,
+    "auto_cleanup": true,
+    "retention_days": 30
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_format": "structured",
+    "log_file": "logs/mcp_training.log",
+    "max_log_size_mb": 100,
+    "log_to_console": true,
+    "log_to_file": true,
+    "level": "INFO",
+    "format": "structured",
+    "file": "logs/mcp_training.log",
+    "max_size_mb": 100,
+    "console": true,
+    "file_enabled": true
+  },
+  "security": {
+    "auth_enabled": false,
+    "api_key": "",
+    "cors_origins": "http://localhost:3000,https://example.com",
+    "rate_limit": 100,
+    "https_only": false,
+    "secure_headers": true
+  },
+  "advanced": {
+    "debug_mode": false,
+    "performance_monitoring": true,
+    "websocket_enabled": true,
+    "auto_backup": false,
+    "custom_config": "[object Object]"
+  }
+}
