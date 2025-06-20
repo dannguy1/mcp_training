@@ -453,4 +453,33 @@ async def create_training_job(
         raise
     except Exception as e:
         logger.error(f"Error creating training job: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create training job: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to create training job: {str(e)}")
+
+
+@router.get("/jobs/{job_id}")
+async def get_training_job(
+    job_id: str,
+    training_service: TrainingService = Depends(get_training_service)
+):
+    """Get individual training job details.
+    
+    Args:
+        job_id: Training job ID
+        training_service: Training service
+        
+    Returns:
+        Training job details
+    """
+    try:
+        job = training_service.get_training_status(job_id)
+        
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Training job not found: {job_id}")
+        
+        return job
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting training job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get training job: {str(e)}") 

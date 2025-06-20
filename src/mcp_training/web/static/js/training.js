@@ -370,14 +370,26 @@ class TrainingManager {
     
     async viewJobDetails(jobId) {
         try {
-            const job = await utils.apiCall(`/training/jobs/${jobId}`);
-            this.showJobDetailsModal(job);
+            console.log('Fetching job details for:', jobId);
+            const response = await fetch(`/api/training/jobs/${jobId}`);
+            const job = await response.json();
+            console.log('Job details response:', job);
+            
+            if (response.ok) {
+                this.showJobDetailsModal(job);
+            } else {
+                utils.showError('Failed to load job details', job.error || 'Unknown error');
+            }
         } catch (error) {
+            console.error('Error fetching job details:', error);
             utils.showError('Failed to load job details', error);
         }
     }
     
     showJobDetailsModal(job) {
+        console.log('Showing job details for:', job);
+        console.log('Comprehensive stats:', job.comprehensive_stats);
+        
         const modal = new bootstrap.Modal(document.getElementById('jobDetailsModal'));
         const content = document.getElementById('jobDetailsContent');
         
@@ -419,40 +431,41 @@ class TrainingManager {
             `;
         }
 
-        // Add comprehensive evaluation results if available
-        if (job.evaluation_results) {
-            const evaluation = job.evaluation_results;
+        // Add comprehensive statistics if available
+        if (job.comprehensive_stats) {
+            console.log('Processing comprehensive stats:', job.comprehensive_stats);
+            const stats = job.comprehensive_stats;
+            const trainingInfo = stats.training_info;
+            const evaluationSummary = stats.evaluation_summary;
+            const performanceMetrics = stats.performance_metrics;
+            
+            console.log('Training info:', trainingInfo);
+            console.log('Evaluation summary:', evaluationSummary);
+            console.log('Performance metrics:', performanceMetrics);
+            
             jobDetailsHtml += `
                 <div class="row mt-4">
                     <div class="col-12">
-                        <h6><i class="bi bi-graph-up me-2"></i>Model Evaluation Results</h6>
+                        <h6><i class="bi bi-graph-up me-2"></i>Comprehensive Training Statistics</h6>
                         <div class="card">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <h6 class="text-primary">Performance Metrics</h6>
+                                        <h6 class="text-primary">Training Information</h6>
                                         <table class="table table-sm">
-                                            <tr><td>Accuracy:</td><td><strong>${(evaluation.accuracy * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>Precision:</td><td><strong>${(evaluation.precision * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>Recall:</td><td><strong>${(evaluation.recall * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>F1 Score:</td><td><strong>${(evaluation.f1_score * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>ROC AUC:</td><td><strong>${(evaluation.roc_auc * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>Training Samples:</td><td><strong>${trainingInfo.samples.toLocaleString()}</strong></td></tr>
+                                            <tr><td>Features:</td><td><strong>${trainingInfo.features}</strong></td></tr>
+                                            <tr><td>Training Duration:</td><td><strong>${trainingInfo.duration_seconds.toFixed(2)}s</strong></td></tr>
+                                            <tr><td>Export File Size:</td><td><strong>${trainingInfo.export_size_mb} MB</strong></td></tr>
+                                            <tr><td>Model Type:</td><td><strong>${job.model_type}</strong></td></tr>
                                         </table>
                                     </div>
                                     <div class="col-md-6">
-                                        <h6 class="text-primary">Threshold Checks</h6>
+                                        <h6 class="text-primary">Model Parameters</h6>
                                         <table class="table table-sm">
-                                            ${evaluation.threshold_checks ? Object.entries(evaluation.threshold_checks).map(([metric, result]) => `
-                                                <tr>
-                                                    <td>${metric}:</td>
-                                                    <td>
-                                                        <span class="badge bg-${result.passed ? 'success' : 'danger'}">
-                                                            ${result.passed ? 'PASS' : 'FAIL'}
-                                                        </span>
-                                                        <small class="text-muted ms-2">(${result.value.toFixed(3)} / ${result.threshold})</small>
-                                                    </td>
-                                                </tr>
-                                            `).join('') : '<tr><td colspan="2">No threshold checks available</td></tr>'}
+                                            ${Object.entries(trainingInfo.model_parameters).map(([param, value]) => `
+                                                <tr><td>${param}:</td><td><strong>${value}</strong></td></tr>
+                                            `).join('')}
                                         </table>
                                     </div>
                                 </div>
@@ -461,125 +474,120 @@ class TrainingManager {
                     </div>
                 </div>
             `;
-        }
-
-        // Add feature importance if available
-        if (job.evaluation_results && job.evaluation_results.feature_importance) {
-            const features = job.evaluation_results.feature_importance;
-            jobDetailsHtml += `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6><i class="bi bi-bar-chart me-2"></i>Feature Importance</h6>
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row">
-                                    ${Object.entries(features).slice(0, 10).map(([feature, importance]) => `
-                                        <div class="col-md-6 mb-2">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-truncate" title="${feature}">${feature}</span>
-                                                <div class="d-flex align-items-center">
-                                                    <div class="progress me-2" style="width: 100px; height: 8px;">
-                                                        <div class="progress-bar bg-primary" style="width: ${importance * 100}%"></div>
-                                                    </div>
-                                                    <small class="text-muted">${(importance * 100).toFixed(1)}%</small>
-                                                </div>
-                                            </div>
+            
+            // Add performance metrics
+            if (performanceMetrics) {
+                jobDetailsHtml += `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6><i class="bi bi-speedometer2 me-2"></i>Performance Metrics</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Score Statistics</h6>
+                                            <table class="table table-sm">
+                                                <tr><td>Score Mean:</td><td><strong>${performanceMetrics.score_mean.toFixed(4)}</strong></td></tr>
+                                                <tr><td>Score Std:</td><td><strong>${performanceMetrics.score_std.toFixed(4)}</strong></td></tr>
+                                                <tr><td>Score Min:</td><td><strong>${performanceMetrics.score_min.toFixed(4)}</strong></td></tr>
+                                                <tr><td>Score Max:</td><td><strong>${performanceMetrics.score_max.toFixed(4)}</strong></td></tr>
+                                            </table>
                                         </div>
-                                    `).join('')}
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Anomaly Detection</h6>
+                                            <table class="table table-sm">
+                                                <tr><td>Anomaly Ratio:</td><td><strong>${(performanceMetrics.anomaly_ratio * 100).toFixed(2)}%</strong></td></tr>
+                                                <tr><td>Threshold Value:</td><td><strong>${performanceMetrics.threshold_value.toFixed(4)}</strong></td></tr>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        }
-
-        // Add recommendations if available
-        if (job.evaluation_results && job.evaluation_results.recommendations) {
-            const recommendations = job.evaluation_results.recommendations;
-            jobDetailsHtml += `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6><i class="bi bi-lightbulb me-2"></i>Recommendations</h6>
-                        <div class="card">
-                            <div class="card-body">
-                                ${recommendations.length > 0 ? `
-                                    <ul class="list-group list-group-flush">
-                                        ${recommendations.map(rec => `
-                                            <li class="list-group-item d-flex align-items-start">
-                                                <i class="bi bi-${rec.priority === 'high' ? 'exclamation-triangle text-warning' : 
-                                                               rec.priority === 'medium' ? 'info-circle text-info' : 
-                                                               'check-circle text-success'} me-2 mt-1"></i>
-                                                <div>
-                                                    <strong>${rec.category}:</strong> ${rec.message}
-                                                    ${rec.suggestion ? `<br><small class="text-muted">Suggestion: ${rec.suggestion}</small>` : ''}
-                                                </div>
-                                            </li>
+                `;
+            }
+            
+            // Add evaluation summary
+            if (evaluationSummary) {
+                jobDetailsHtml += `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6><i class="bi bi-check-circle me-2"></i>Evaluation Summary</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Overall Performance</h6>
+                                            <table class="table table-sm">
+                                                <tr><td>Threshold Pass Rate:</td><td><strong>${(evaluationSummary.overall_performance.threshold_pass_rate * 100).toFixed(0)}%</strong></td></tr>
+                                                <tr><td>Passed Thresholds:</td><td><strong>${evaluationSummary.overall_performance.passed_thresholds}/${evaluationSummary.overall_performance.total_thresholds}</strong></td></tr>
+                                            </table>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Best/Worst Metrics</h6>
+                                            <table class="table table-sm">
+                                                <tr><td>Best Metric:</td><td><strong>${evaluationSummary.best_metrics.best_metric[0]} (${evaluationSummary.best_metrics.best_metric[1].toFixed(4)})</strong></td></tr>
+                                                <tr><td>Worst Metric:</td><td><strong>${evaluationSummary.best_metrics.worst_metric[0]} (${evaluationSummary.best_metrics.worst_metric[1].toFixed(4)})</strong></td></tr>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Add recommendations
+                if (evaluationSummary.recommendations && evaluationSummary.recommendations.length > 0) {
+                    jobDetailsHtml += `
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h6><i class="bi bi-lightbulb me-2"></i>Recommendations</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <ul class="list-group list-group-flush">
+                                            ${evaluationSummary.recommendations.map(rec => `
+                                                <li class="list-group-item d-flex align-items-start">
+                                                    <i class="bi bi-info-circle text-info me-2 mt-1"></i>
+                                                    <div>${rec}</div>
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Add feature names
+            if (trainingInfo.feature_names && trainingInfo.feature_names.length > 0) {
+                jobDetailsHtml += `
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6><i class="bi bi-list-ul me-2"></i>Feature Names (${trainingInfo.feature_names.length} total)</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row">
+                                        ${trainingInfo.feature_names.map((feature, index) => `
+                                            <div class="col-md-4 mb-1">
+                                                <small class="text-muted">${index + 1}. ${feature}</small>
+                                            </div>
                                         `).join('')}
-                                    </ul>
-                                ` : '<p class="text-muted">No specific recommendations available.</p>'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Add training report if available
-        if (job.training_report) {
-            const report = job.training_report;
-            jobDetailsHtml += `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6><i class="bi bi-file-text me-2"></i>Training Report</h6>
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <h6 class="text-primary">Training Summary</h6>
-                                        <table class="table table-sm">
-                                            <tr><td>Total Iterations:</td><td>${report.total_iterations || 'N/A'}</td></tr>
-                                            <tr><td>Final Loss:</td><td>${report.final_loss ? report.final_loss.toFixed(4) : 'N/A'}</td></tr>
-                                            <tr><td>Training Time:</td><td>${report.training_time || 'N/A'}</td></tr>
-                                            <tr><td>Model Size:</td><td>${report.model_size || 'N/A'}</td></tr>
-                                        </table>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h6 class="text-primary">Data Summary</h6>
-                                        <table class="table table-sm">
-                                            <tr><td>Training Samples:</td><td>${report.training_samples || 'N/A'}</td></tr>
-                                            <tr><td>Validation Samples:</td><td>${report.validation_samples || 'N/A'}</td></tr>
-                                            <tr><td>Test Samples:</td><td>${report.test_samples || 'N/A'}</td></tr>
-                                            <tr><td>Features:</td><td>${report.num_features || 'N/A'}</td></tr>
-                                        </table>
                                     </div>
                                 </div>
-                                ${report.convergence_info ? `
-                                    <div class="mt-3">
-                                        <h6 class="text-primary">Convergence Information</h6>
-                                        <p class="mb-2">${report.convergence_info}</p>
-                                    </div>
-                                ` : ''}
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        }
-
-        // Add legacy metrics if available (fallback)
-        if (job.metrics && !job.evaluation_results) {
-            jobDetailsHtml += `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6>Training Metrics</h6>
-                        <pre class="bg-light p-3 rounded">${JSON.stringify(job.metrics, null, 2)}</pre>
-                    </div>
-                </div>
-            `;
+                `;
+            }
         }
 
         content.innerHTML = jobDetailsHtml;
+        console.log('Final job details HTML length:', jobDetailsHtml.length);
+        console.log('Modal content element:', content);
         
         // Show/hide download button based on job status
         const downloadBtn = document.getElementById('downloadResultsBtn');

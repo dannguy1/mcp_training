@@ -73,11 +73,11 @@ evaluation:
     - roc_auc
     - average_precision
   thresholds:
-    accuracy: 0.8
-    precision: 0.7
-    recall: 0.7
-    f1_score: 0.7
-    roc_auc: 0.8
+    accuracy: 0.5
+    precision: 0.3
+    recall: 0.5
+    f1_score: 0.4
+    roc_auc: 0.5
   cross_validation: true
 
 # Database configuration

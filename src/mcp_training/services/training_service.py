@@ -89,7 +89,8 @@ class TrainingService:
             training_result = await self.training_pipeline.run_training_pipeline(
                 export_file_path=export_file,
                 model_type=model_type,
-                model_name=model_name
+                model_name=model_name,
+                training_id=training_id
             )
             
             # Step 3: Complete
@@ -211,11 +212,108 @@ class TrainingService:
     
     def get_training_status(self, training_id: str) -> Optional[Dict[str, Any]]:
         """Get training job status."""
-        return self.training_tasks.get(training_id)
+        # First check in-memory tasks
+        task = self.training_tasks.get(training_id)
+        if task:
+            return task
+        
+        # If not found in memory, check model registry for completed jobs
+        return self._load_completed_job_from_registry(training_id)
+    
+    def _get_evaluation_summary_from_registry(self, version: str) -> Dict[str, Any]:
+        """Get evaluation summary from model registry."""
+        try:
+            registry_file = Path(self.config.storage.directory) / 'model_registry.json'
+            if registry_file.exists():
+                with open(registry_file, 'r') as f:
+                    registry = json.load(f)
+                
+                if version in registry:
+                    return registry[version].get('evaluation_summary', {})
+            return {}
+        except Exception as e:
+            logger.error(f"Error getting evaluation summary from registry: {e}")
+            return {}
+    
+    def _load_completed_job_from_registry(self, training_id: str) -> Optional[Dict[str, Any]]:
+        """Load completed job information from model registry."""
+        try:
+            # Search through all models to find one with matching training_id
+            models = self.model_registry.list_models()
+            for model in models:
+                version = model['version']
+                metadata = self.model_registry.get_model(version)
+                if metadata:
+                    # Check both model_info.training_id and training_info.training_id for robustness
+                    model_info_tid = getattr(metadata.model_info, 'training_id', None)
+                    training_info_tid = getattr(metadata.training_info, 'training_id', None)
+                    if model_info_tid == training_id or training_info_tid == training_id:
+                        return {
+                            'id': training_id,
+                            'status': 'completed',
+                            'progress': 100,
+                            'step': 'Training completed',
+                            'error': None,
+                            'result': {
+                                'model_version': version,
+                                'model_type': metadata.model_info.model_type,
+                                'training_samples': metadata.training_info.training_samples,
+                                'evaluation_results': metadata.evaluation_info.basic_metrics if hasattr(metadata, 'evaluation_info') else None,
+                                'export_file': metadata.training_info.export_file if hasattr(metadata.training_info, 'export_file') else None,
+                                'training_duration': metadata.training_info.training_duration if hasattr(metadata.training_info, 'training_duration') else None,
+                                'feature_names': metadata.training_info.feature_names if hasattr(metadata.training_info, 'feature_names') else None,
+                                'export_file_size': metadata.training_info.export_file_size if hasattr(metadata.training_info, 'export_file_size') else None,
+                                'model_parameters': metadata.training_info.model_parameters if hasattr(metadata.training_info, 'model_parameters') else None
+                            },
+                            'start_time': metadata.model_info.created_at,
+                            'updated_at': metadata.model_info.created_at,
+                            'export_file': metadata.training_info.export_file if hasattr(metadata.training_info, 'export_file') else None,
+                            'model_type': metadata.model_info.model_type,
+                            'model_name': None,
+                            # Add comprehensive statistics
+                            'comprehensive_stats': {
+                                'training_info': {
+                                    'samples': metadata.training_info.training_samples,
+                                    'features': len(metadata.training_info.feature_names) if hasattr(metadata.training_info, 'feature_names') else 0,
+                                    'feature_names': metadata.training_info.feature_names if hasattr(metadata.training_info, 'feature_names') else [],
+                                    'duration_seconds': metadata.training_info.training_duration if hasattr(metadata.training_info, 'training_duration') else 0,
+                                    'export_size_mb': round(metadata.training_info.export_file_size / 1024 / 1024, 2) if hasattr(metadata.training_info, 'export_file_size') else 0,
+                                    'model_parameters': metadata.training_info.model_parameters if hasattr(metadata.training_info, 'model_parameters') else {}
+                                },
+                                'evaluation_summary': self._get_evaluation_summary_from_registry(version),
+                                'performance_metrics': metadata.evaluation_info.basic_metrics if hasattr(metadata, 'evaluation_info') else {}
+                            }
+                        }
+            return None
+        except Exception as e:
+            logger.error(f"Error loading completed job from registry: {e}")
+            return None
     
     def list_training_tasks(self) -> Dict[str, Dict[str, Any]]:
-        """List all training tasks."""
-        return self.training_tasks
+        """List all training tasks (including completed ones from registry)."""
+        # Start with in-memory tasks
+        all_tasks = self.training_tasks.copy()
+        
+        # Add completed jobs from registry
+        try:
+            models = self.model_registry.list_models()
+            for model in models:
+                version = model['version']
+                metadata = self.model_registry.get_model(version)
+                if metadata:
+                    # Get training_id from metadata
+                    model_info_tid = getattr(metadata.model_info, 'training_id', None)
+                    training_info_tid = getattr(metadata.training_info, 'training_id', None)
+                    training_id = model_info_tid or training_info_tid
+                    
+                    if training_id and training_id not in all_tasks:
+                        completed_job = self._load_completed_job_from_registry(training_id)
+                        if completed_job:
+                            all_tasks[training_id] = completed_job
+        except Exception as e:
+            logger.error(f"Error loading completed jobs from registry: {e}")
+        
+        return all_tasks
     
     def _get_training_duration(self, training_id: str) -> float:
         """Get training duration for a task."""
