@@ -57,13 +57,18 @@ class StorageService:
         """Store an export file in the exports directory.
         
         Args:
-            export_file: Path to export file
+            export_file: Path to export file or file object
             filename: Optional filename to use (uses original name if not provided)
             
         Returns:
             Path to stored file or None if error
         """
         try:
+            # Handle file objects (from FastAPI UploadFile)
+            if hasattr(export_file, 'read'):
+                return self.store_uploaded_export(export_file, filename)
+            
+            # Handle file paths
             source_path = Path(export_file)
             if not validate_file_path(source_path):
                 logger.error(f"Invalid export file: {export_file}")
@@ -91,6 +96,42 @@ class StorageService:
                 
         except Exception as e:
             logger.error(f"Error storing export {export_file}: {e}")
+            return None
+    
+    def store_uploaded_export(self, file_obj, filename: Optional[str] = None) -> Optional[Path]:
+        """Store an uploaded export file in the exports directory.
+        
+        Args:
+            file_obj: File object from FastAPI UploadFile
+            filename: Optional filename to use (uses original name if not provided)
+            
+        Returns:
+            Path to stored file or None if error
+        """
+        try:
+            # Generate filename if not provided
+            if filename is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"export_{timestamp}.json"
+            
+            # Ensure filename has .json extension
+            if not filename.endswith('.json'):
+                filename += '.json'
+            
+            dest_path = self.exports_dir / filename
+            
+            # Write uploaded file content
+            with open(dest_path, 'wb') as f:
+                # Reset file pointer to beginning
+                file_obj.seek(0)
+                # Copy file content
+                shutil.copyfileobj(file_obj, f)
+            
+            logger.info(f"Uploaded export stored: {dest_path}")
+            return dest_path
+                
+        except Exception as e:
+            logger.error(f"Error storing uploaded export: {e}")
             return None
     
     def list_exports(self, pattern: str = "*.json") -> List[Dict[str, Any]]:

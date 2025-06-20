@@ -376,6 +376,57 @@ async def list_export_files(
         raise HTTPException(status_code=500, detail=f"Failed to list export files: {str(e)}")
 
 
+@router.post("/exports/upload")
+async def upload_export_file(
+    file: UploadFile = File(...),
+    storage_service: StorageService = Depends(get_storage_service)
+):
+    """Upload an export file to the exports directory.
+    
+    Args:
+        file: Uploaded export file
+        storage_service: Storage service
+        
+    Returns:
+        Upload result with file information
+    """
+    try:
+        logger.info(f"Uploading export file: {file.filename}")
+        
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        if not validate_file_extension(file.filename, ["json"]):
+            raise HTTPException(status_code=400, detail="File must be a JSON file")
+        
+        # Store uploaded file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"upload_{timestamp}_{file.filename}"
+        stored_path = storage_service.store_export(file.file, filename)
+        
+        if not stored_path:
+            raise HTTPException(status_code=500, detail="Failed to store uploaded file")
+        
+        # Get file information
+        file_info = storage_service.get_export_info(filename)
+        
+        logger.info(f"Export file uploaded successfully: {filename}")
+        
+        return {
+            "message": "Export file uploaded successfully",
+            "filename": filename,
+            "path": str(stored_path),
+            "file_info": file_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading export file: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload export file: {str(e)}")
+
+
 @router.get("/jobs")
 async def get_training_jobs(
     status: Optional[str] = None,

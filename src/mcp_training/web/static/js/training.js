@@ -11,6 +11,7 @@ console.log('Utils available:', typeof utils !== 'undefined');
 
 class TrainingManager {
     constructor() {
+        console.log('TrainingManager constructor called');
         this.jobs = [];
         this.filteredJobs = [];
         this.currentJobId = null;
@@ -19,6 +20,7 @@ class TrainingManager {
     }
     
     init() {
+        console.log('TrainingManager init called');
         this.setupEventListeners();
         this.loadTrainingJobs();
         this.startAutoRefresh();
@@ -103,8 +105,24 @@ class TrainingManager {
         // Modal events
         const newTrainingModal = document.getElementById('newTrainingModal');
         if (newTrainingModal) {
+            newTrainingModal.addEventListener('show.bs.modal', () => {
+                this.loadExportFiles();
+            });
+            
             newTrainingModal.addEventListener('hidden.bs.modal', () => {
-                this.resetForm();
+                this.resetTrainingForm();
+            });
+        }
+        
+        const uploadExportModal = document.getElementById('uploadExportModal');
+        if (uploadExportModal) {
+            uploadExportModal.addEventListener('show.bs.modal', () => {
+                console.log('Upload modal opening, re-attaching event listeners...');
+                this.attachUploadEventListeners();
+            });
+            
+            uploadExportModal.addEventListener('hidden.bs.modal', () => {
+                this.resetUploadForm();
             });
         }
         
@@ -777,6 +795,313 @@ class TrainingManager {
     destroy() {
         this.stopAutoRefresh();
     }
+    
+    handleDragOver(e) {
+        e.preventDefault();
+        e.currentTarget.classList.add('dragover');
+    }
+    
+    handleFileDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            this.handleFile(files[0]);
+        }
+    }
+    
+    handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (file) {
+            this.handleFile(file);
+        }
+    }
+    
+    handleFile(file) {
+        console.log('handleFile called with:', file.name, file.size);
+        
+        // Validate file type
+        if (!file.name.endsWith('.json')) {
+            utils.showError('Please select a valid JSON file');
+            return;
+        }
+        
+        // Store the file reference in the class instance
+        this.currentUploadFile = file;
+        console.log('File stored in instance:', this.currentUploadFile?.name);
+        
+        // Update file info display
+        const uploadArea = document.getElementById('trainingFileUploadArea');
+        if (uploadArea) {
+            uploadArea.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="bi bi-file-earmark-text me-2"></i>
+                    <strong>${file.name}</strong>
+                    <small class="text-muted ms-2">(${utils.formatFileSize(file.size)})</small>
+                </div>
+            `;
+        }
+        
+        // Enable upload button
+        const uploadBtn = document.getElementById('trainingUploadBtn');
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+        }
+        
+        // Also try to set the file on the file input element
+        const fileInput = document.querySelector('input[type="file"][id="trainingUploadFile"]');
+        if (fileInput) {
+            try {
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                console.log('File set on input element:', fileInput.files[0]?.name);
+            } catch (error) {
+                console.log('Could not set file on input element:', error.message);
+            }
+        }
+    }
+    
+    async uploadFile() {
+        try {
+            console.log('uploadFile method called');
+            console.log('utils object available:', typeof utils !== 'undefined');
+            console.log('utils.apiCall available:', typeof utils?.apiCall === 'function');
+            
+            if (typeof utils === 'undefined') {
+                throw new Error('Utils object is not available');
+            }
+            
+            // Check if we have a stored file reference
+            if (this.currentUploadFile) {
+                console.log('Using stored file reference:', this.currentUploadFile.name);
+                const file = this.currentUploadFile;
+                
+                console.log('File to upload:', file.name, file.size);
+                
+                // Validate file type
+                if (!file.name.endsWith('.json')) {
+                    utils.showError('Please select a valid JSON file');
+                    return;
+                }
+                
+                utils.showLoading();
+                
+                // Show upload progress
+                const progressContainer = document.getElementById('trainingUploadProgress');
+                if (progressContainer) {
+                    progressContainer.style.display = 'block';
+                }
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                console.log('Making API call to upload file...');
+                const response = await utils.apiCall('/training/exports/upload', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {} // Let browser set content-type for FormData
+                });
+                
+                console.log('Upload response:', response);
+                utils.showSuccess('Export file uploaded successfully');
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('uploadExportModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                
+                // Refresh export files list in training modal
+                this.loadExportFiles();
+                
+                // Refresh training jobs to show any new jobs that might use this file
+                this.loadTrainingJobs();
+                
+            } else {
+                utils.showError('Please select a file to upload');
+            }
+            
+        } catch (error) {
+            console.error('Upload error details:', error);
+            console.error('Error stack:', error.stack);
+            
+            if (typeof utils !== 'undefined') {
+                utils.showError('Failed to upload file', error);
+            } else {
+                // Fallback error handling if utils is not available
+                alert(`Failed to upload file: ${error.message}`);
+            }
+        } finally {
+            if (typeof utils !== 'undefined') {
+                utils.hideLoading();
+            }
+            
+            // Hide progress
+            const progressContainer = document.getElementById('trainingUploadProgress');
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+        }
+    }
+    
+    resetUploadForm() {
+        console.log('resetUploadForm called');
+        
+        const uploadArea = document.getElementById('trainingFileUploadArea');
+        console.log('Upload area found:', !!uploadArea);
+        
+        if (uploadArea) {
+            // Store the file input element
+            const fileInput = uploadArea.querySelector('input[type="file"]');
+            console.log('Existing file input found:', !!fileInput);
+            
+            // Update the display content
+            uploadArea.innerHTML = `
+                <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
+                <h6>Drag and drop your export file here</h6>
+                <p class="text-muted">or click to browse</p>
+            `;
+            
+            // Re-add the file input element
+            if (fileInput) {
+                fileInput.value = '';
+                uploadArea.appendChild(fileInput);
+                console.log('Re-added existing file input');
+            } else {
+                // Create a new file input if none exists
+                const newFileInput = document.createElement('input');
+                newFileInput.type = 'file';
+                newFileInput.id = 'trainingUploadFile';
+                newFileInput.accept = '.json';
+                newFileInput.style.display = 'none';
+                newFileInput.style.position = 'absolute';
+                newFileInput.style.opacity = '0';
+                newFileInput.style.pointerEvents = 'none';
+                newFileInput.style.zIndex = '-1';
+                uploadArea.appendChild(newFileInput);
+                console.log('Created new file input element');
+            }
+            
+            // Verify the file input exists after reset
+            const verifyFileInput = document.getElementById('trainingUploadFile');
+            console.log('File input verification after reset:', !!verifyFileInput);
+        }
+        
+        const uploadBtn = document.getElementById('trainingUploadBtn');
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+        }
+    }
+    
+    attachUploadEventListeners() {
+        console.log('Attaching upload event listeners...');
+        
+        const uploadArea = document.getElementById('trainingFileUploadArea');
+        const uploadFile = document.getElementById('trainingUploadFile');
+        const uploadBtn = document.getElementById('trainingUploadBtn');
+        
+        console.log('Upload elements found:', {
+            area: !!uploadArea,
+            file: !!uploadFile,
+            btn: !!uploadBtn
+        });
+        
+        if (uploadArea && uploadFile) {
+            // Remove any existing listeners by cloning and replacing the upload area
+            console.log('Removing existing listeners by cloning upload area...');
+            
+            // Clone upload area to remove all listeners
+            const newUploadArea = uploadArea.cloneNode(true);
+            uploadArea.parentNode.replaceChild(newUploadArea, uploadArea);
+            
+            // Get the file input from the cloned area
+            const newUploadFile = newUploadArea.querySelector('#trainingUploadFile');
+            
+            console.log('New elements after cloning:', {
+                area: !!newUploadArea,
+                file: !!newUploadFile
+            });
+            
+            if (newUploadFile) {
+                // Store reference to the file input
+                this.currentFileInput = newUploadFile;
+                
+                // Create simple click handler
+                this.uploadAreaClickHandler = (e) => {
+                    console.log('Upload area clicked!');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('Triggering file input click');
+                    this.currentFileInput.click();
+                };
+                
+                // Create drag and drop handlers
+                this.uploadAreaDragOverHandler = (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('dragover');
+                };
+                
+                this.uploadAreaDropHandler = (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('dragover');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        console.log('File dropped:', files[0].name);
+                        this.handleFile(files[0]);
+                    }
+                };
+                
+                // Create file change handler
+                this.uploadFileChangeHandler = (e) => {
+                    console.log('File input change event');
+                    const file = e.target.files[0];
+                    if (file) {
+                        console.log('File selected via input:', file.name);
+                        this.handleFile(file);
+                    }
+                };
+                
+                // Attach event listeners
+                newUploadArea.addEventListener('click', this.uploadAreaClickHandler);
+                newUploadArea.addEventListener('dragover', this.uploadAreaDragOverHandler);
+                newUploadArea.addEventListener('drop', this.uploadAreaDropHandler);
+                newUploadFile.addEventListener('change', this.uploadFileChangeHandler);
+                
+                console.log('Upload event listeners attached successfully');
+            } else {
+                console.error('File input not found in cloned upload area');
+            }
+        } else {
+            console.error('Upload area or file input not found during attachment');
+        }
+        
+        if (uploadBtn) {
+            if (this.uploadBtnClickHandler) {
+                uploadBtn.removeEventListener('click', this.uploadBtnClickHandler);
+            }
+            this.uploadBtnClickHandler = () => {
+                console.log('Upload button clicked!');
+                this.uploadFile();
+            };
+            uploadBtn.addEventListener('click', this.uploadBtnClickHandler);
+        }
+    }
+    
+    resetTrainingForm() {
+        const form = document.getElementById('trainingForm');
+        if (form) {
+            form.reset();
+        }
+        
+        const submitBtn = document.getElementById('submitTrainingBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
+    }
 }
 
 // Initialize training manager when DOM is loaded
@@ -789,6 +1114,20 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Not on training page, skipping TrainingManager initialization');
         return;
     }
+    
+    // Test if upload modal elements exist
+    console.log('Testing upload modal elements...');
+    const uploadModal = document.getElementById('uploadExportModal');
+    const uploadArea = document.getElementById('trainingFileUploadArea');
+    const uploadFile = document.getElementById('trainingUploadFile');
+    const uploadBtn = document.getElementById('trainingUploadBtn');
+    
+    console.log('Upload modal elements found:', {
+        modal: !!uploadModal,
+        area: !!uploadArea,
+        file: !!uploadFile,
+        btn: !!uploadBtn
+    });
     
     try {
         window.trainingManager = new TrainingManager();
@@ -820,6 +1159,25 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Modal element found and ready');
         } else {
             console.error('Modal element not found during initialization');
+        }
+        
+        // Test upload modal functionality
+        console.log('Testing upload modal functionality...');
+        const uploadModalElement = document.getElementById('uploadExportModal');
+        const uploadButton = document.querySelector('[data-bs-target="#uploadExportModal"]');
+        if (uploadModalElement) {
+            console.log('Upload modal element found and ready');
+        } else {
+            console.error('Upload modal element not found during initialization');
+        }
+        if (uploadButton) {
+            console.log('Upload button found:', uploadButton);
+            // Test if Bootstrap modal is working
+            uploadButton.addEventListener('click', () => {
+                console.log('Upload button clicked via event listener');
+            });
+        } else {
+            console.error('Upload button not found during initialization');
         }
         
         // Test export file loading

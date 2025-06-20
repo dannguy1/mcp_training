@@ -27,6 +27,12 @@ class DashboardManager {
             uploadFile.addEventListener('change', this.handleFileSelect.bind(this));
         }
         
+        // Upload button
+        const uploadBtn = document.getElementById('uploadBtn');
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => this.uploadFile());
+        }
+        
         // Training form
         const exportFile = document.getElementById('exportFile');
         if (exportFile) {
@@ -518,6 +524,85 @@ class DashboardManager {
         }
     }
     
+    async uploadFile() {
+        try {
+            const fileInput = document.getElementById('uploadFile');
+            if (!fileInput.files.length) {
+                utils.showError('Please select a file to upload');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Validate file type
+            if (!file.name.endsWith('.json')) {
+                utils.showError('Please select a valid JSON file');
+                return;
+            }
+            
+            utils.showLoading();
+            
+            // Show upload progress
+            const progressContainer = document.getElementById('uploadProgress');
+            const progressBar = progressContainer?.querySelector('.progress-bar');
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await utils.apiCall('/training/exports/upload', {
+                method: 'POST',
+                body: formData,
+                headers: {} // Let browser set content-type for FormData
+            });
+            
+            utils.showSuccess('Export file uploaded successfully');
+            
+            // Close modal and refresh data
+            const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Reset form
+            this.resetUploadForm();
+            
+            // Refresh dashboard to show new file
+            this.updateDashboard();
+            
+        } catch (error) {
+            utils.showError('Failed to upload file', error);
+        } finally {
+            utils.hideLoading();
+            
+            // Hide progress
+            const progressContainer = document.getElementById('uploadProgress');
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+        }
+    }
+    
+    resetUploadForm() {
+        const fileInput = document.getElementById('uploadFile');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+        const uploadBtn = document.getElementById('uploadBtn');
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+        }
+        
+        // Reset file info display
+        const fileInfo = document.getElementById('fileInfo');
+        if (fileInfo) {
+            fileInfo.style.display = 'none';
+        }
+    }
+    
     updateFileInfo(file, nameId, sizeId) {
         const nameElement = document.getElementById(nameId);
         const sizeElement = document.getElementById(sizeId);
@@ -580,4 +665,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Global functions for use in HTML
-window.refreshDashboard = () => window.dashboard?.refresh(); 
+window.refreshDashboard = () => window.dashboard?.refresh();
+window.uploadExportFile = () => window.dashboard?.uploadFile(); 

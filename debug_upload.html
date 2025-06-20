@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Debug</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .file-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 0.375rem;
+            padding: 2rem;
+            text-align: center;
+            transition: border-color 0.15s ease-in-out;
+            cursor: pointer;
+        }
+        .file-upload-area:hover {
+            border-color: #0d6efd;
+        }
+        .file-upload-area.dragover {
+            border-color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Upload Debug Test</h2>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <h4>Direct File Input Test</h4>
+                <input type="file" id="directFileInput" accept=".json" class="form-control">
+                <button class="btn btn-primary mt-2" onclick="testDirectUpload()">Test Direct Upload</button>
+            </div>
+            
+            <div class="col-md-6">
+                <h4>Modal Upload Test</h4>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                    Open Upload Modal
+                </button>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h4>Console Output</h4>
+            <div id="consoleOutput" style="background: #f8f9fa; padding: 1rem; border-radius: 0.375rem; font-family: monospace; height: 200px; overflow-y: auto;"></div>
+        </div>
+    </div>
+    
+    <!-- Upload Modal -->
+    <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadModalLabel">Upload Export File</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="file-upload-area" id="fileUploadArea">
+                        <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
+                        <h6>Drag and drop your export file here</h6>
+                        <p class="text-muted">or click to browse</p>
+                        <input type="file" id="uploadFile" accept=".json" style="display: none;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="uploadBtn" disabled>
+                        <i class="bi bi-upload me-2"></i>
+                        Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Custom console logging
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const consoleOutput = document.getElementById('consoleOutput');
+        
+        function logToOutput(message, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : 'black';
+            consoleOutput.innerHTML += `<div style="color: ${color};">[${timestamp}] ${message}</div>`;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            logToOutput(args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            logToOutput(args.join(' '), 'error');
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, setting up upload test...');
+            
+            // Test direct file input
+            const directFileInput = document.getElementById('directFileInput');
+            directFileInput.addEventListener('change', (e) => {
+                console.log('Direct file input change:', e.target.files[0]?.name);
+            });
+            
+            // Test modal upload
+            const fileUploadArea = document.getElementById('fileUploadArea');
+            const uploadFile = document.getElementById('uploadFile');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            console.log('Modal elements found:', {
+                area: !!fileUploadArea,
+                file: !!uploadFile,
+                btn: !!uploadBtn
+            });
+            
+            if (fileUploadArea && uploadFile) {
+                fileUploadArea.addEventListener('click', () => {
+                    console.log('Upload area clicked!');
+                    uploadFile.click();
+                });
+                
+                uploadFile.addEventListener('change', (e) => {
+                    console.log('Modal file input change:', e.target.files[0]?.name);
+                    if (e.target.files[0]) {
+                        uploadBtn.disabled = false;
+                        fileUploadArea.innerHTML = `
+                            <div class="alert alert-info">
+                                <strong>${e.target.files[0].name}</strong>
+                                <small class="text-muted ms-2">(${formatFileSize(e.target.files[0].size)})</small>
+                            </div>
+                        `;
+                    }
+                });
+                
+                uploadBtn.addEventListener('click', () => {
+                    console.log('Upload button clicked!');
+                    testModalUpload();
+                });
+                
+                console.log('Modal event listeners attached successfully');
+            } else {
+                console.error('Modal elements not found');
+            }
+        });
+        
+        function testDirectUpload() {
+            const fileInput = document.getElementById('directFileInput');
+            if (fileInput.files.length > 0) {
+                console.log('Testing direct upload with:', fileInput.files[0].name);
+                uploadToServer(fileInput.files[0]);
+            } else {
+                console.log('No file selected for direct upload');
+            }
+        }
+        
+        function testModalUpload() {
+            const fileInput = document.getElementById('uploadFile');
+            if (fileInput.files.length > 0) {
+                console.log('Testing modal upload with:', fileInput.files[0].name);
+                uploadToServer(fileInput.files[0]);
+            } else {
+                console.log('No file selected for modal upload');
+            }
+        }
+        
+        async function uploadToServer(file) {
+            try {
+                console.log('Starting upload to server...');
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('http://localhost:8000/api/training/exports/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Upload successful:', result.message);
+                } else {
+                    const error = await response.text();
+                    console.error('Upload failed:', error);
+                }
+            } catch (error) {
+                console.error('Upload error:', error.message);
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html> 

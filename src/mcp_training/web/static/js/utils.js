@@ -2,8 +2,8 @@
  * Utility functions for MCP Training Service UI
  */
 
-// API Base URL
-const API_BASE = '/api';
+// API Base URL - Point to backend server
+const API_BASE = 'http://localhost:8000/api';
 
 /**
  * Make API calls with error handling
