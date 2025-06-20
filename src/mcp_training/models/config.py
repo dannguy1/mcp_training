@@ -22,6 +22,7 @@ class FeatureConfig(BaseModel):
     numeric: List[str] = Field(default_factory=list, description="Numeric features")
     categorical: List[str] = Field(default_factory=list, description="Categorical features")
     temporal: List[str] = Field(default_factory=list, description="Temporal features")
+    derived: List[str] = Field(default_factory=list, description="Derived features")
 
 
 class EarlyStoppingConfig(BaseModel):
@@ -57,6 +58,30 @@ class EvaluationConfig(BaseModel):
     cross_validation: bool = Field(default=True, description="Enable cross-validation")
 
 
+class DatabaseConfig(BaseModel):
+    """Database configuration for training."""
+    table_name: str = Field(default="log_entries", description="Main log table")
+    wifi_programs: List[str] = Field(default=["hostapd", "wpa_supplicant"], description="WiFi-related programs")
+    batch_size: int = Field(default=1000, description="Data fetching batch size")
+    max_records: int = Field(default=100000, description="Maximum records to fetch")
+
+
+class AlertingConfig(BaseModel):
+    """Alerting configuration."""
+    enabled: bool = Field(default=True, description="Enable alerting")
+    email_notifications: bool = Field(default=False, description="Email notifications")
+    slack_notifications: bool = Field(default=False, description="Slack notifications")
+
+
+class MonitoringConfig(BaseModel):
+    """Monitoring configuration for training."""
+    enable_drift_detection: bool = Field(default=True, description="Enable drift detection")
+    drift_threshold: float = Field(default=0.1, description="Drift detection threshold")
+    performance_tracking: bool = Field(default=True, description="Enable performance tracking")
+    resource_monitoring: bool = Field(default=True, description="Enable resource monitoring")
+    alerting: AlertingConfig = Field(default_factory=AlertingConfig, description="Alerting configuration")
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration."""
     level: str = Field(default="INFO", description="Log level")
@@ -74,6 +99,8 @@ class ModelConfig(BaseModel):
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     def __init__(self, **data):
@@ -98,6 +125,20 @@ class ModelConfig(BaseModel):
                 'total_devices',
                 'max_device_activity',
                 'mean_device_activity'
+            ]
+        
+        if not self.features.temporal:
+            self.features.temporal = [
+                'mean_hour_of_day',
+                'mean_day_of_week',
+                'mean_time_between_events'
+            ]
+        
+        if not self.features.derived:
+            self.features.derived = [
+                'signal_strength_trend',
+                'connection_stability',
+                'network_load'
             ]
         
         if not self.evaluation.metrics:

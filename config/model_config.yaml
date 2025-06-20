@@ -1,9 +1,114 @@
-# Model Configuration for MCP Training Service
+# Enhanced Model Configuration for MCP Training Service
+version: '2.0.0'
 
 # Default model type
 default_model: isolation_forest
 
 # Model configurations
+model:
+  type: isolation_forest
+  n_estimators: 100
+  max_samples: auto
+  contamination: 0.1
+  random_state: 42
+  bootstrap: true
+  max_features: 1.0
+
+# Feature configuration
+features:
+  numeric:
+    - auth_failure_ratio
+    - deauth_ratio
+    - beacon_ratio
+    - unique_mac_count
+    - unique_ssid_count
+    - mean_signal_strength
+    - std_signal_strength
+    - mean_data_rate
+    - mean_packet_loss
+    - error_ratio
+    - warning_ratio
+    - total_devices
+    - max_device_activity
+    - mean_device_activity
+  categorical:
+    - device_type
+    - connection_type
+  temporal:
+    - mean_hour_of_day
+    - mean_day_of_week
+    - mean_time_between_events
+  derived:
+    - signal_strength_trend
+    - connection_stability
+    - network_load
+
+# Training configuration
+training:
+  test_size: 0.2
+  validation_size: 0.1
+  random_state: 42
+  n_jobs: -1
+  cross_validation_folds: 5
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 0.001
+
+# Storage configuration
+storage:
+  directory: models
+  version_format: '%Y%m%d_%H%M%S'
+  keep_last_n_versions: 5
+  backup_enabled: true
+  compression: true
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+    - average_precision
+  thresholds:
+    accuracy: 0.8
+    precision: 0.7
+    recall: 0.7
+    f1_score: 0.7
+    roc_auc: 0.8
+  cross_validation: true
+
+# Database configuration
+database:
+  table_name: log_entries
+  wifi_programs:
+    - hostapd
+    - wpa_supplicant
+  batch_size: 1000
+  max_records: 100000
+
+# Monitoring configuration
+monitoring:
+  enable_drift_detection: true
+  drift_threshold: 0.1
+  performance_tracking: true
+  resource_monitoring: true
+  alerting:
+    enabled: true
+    email_notifications: false
+    slack_notifications: false
+
+# Logging configuration
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file: logs/model_training.log
+  max_size: 100MB
+  backup_count: 10
+
+# Legacy model configurations (for backward compatibility)
 models:
   isolation_forest:
     name: "Isolation Forest"
@@ -33,7 +138,7 @@ models:
       novelty: false
       n_jobs: -1
 
-# Feature extraction configuration
+# Feature extraction configuration (for backward compatibility)
 feature_extraction:
   wifi_features:
     enabled: true
@@ -61,39 +166,7 @@ feature_extraction:
       - special_char_count
       - uppercase_ratio
 
-# Training configuration
-training:
-  test_size: 0.2
-  random_state: 42
-  cross_validation_folds: 5
-  scoring_metrics:
-    - accuracy
-    - precision
-    - recall
-    - f1
-    - roc_auc
-  
-  # Early stopping configuration
-  early_stopping:
-    enabled: true
-    patience: 10
-    min_delta: 0.001
-
-# Evaluation configuration
-evaluation:
-  metrics:
-    - accuracy
-    - precision
-    - recall
-    - f1_score
-    - roc_auc_score
-    - confusion_matrix
-  
-  thresholds:
-    anomaly_threshold: 0.5
-    confidence_threshold: 0.8
-
-# Model persistence
+# Model persistence (for backward compatibility)
 persistence:
   format: joblib
   compression: gzip

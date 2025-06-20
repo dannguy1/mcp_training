@@ -16,6 +16,8 @@ from ..core.export_validator import ExportValidator
 from ..models.config import ModelConfig
 from ..models.metadata import ModelMetadata
 from ..models.registry import ModelRegistry
+from ..models.evaluation import ModelEvaluator
+from ..models.training_pipeline import TrainingPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +27,15 @@ class TrainingService:
     
     def __init__(self, config: Optional[ModelConfig] = None, model_service=None, storage_service=None):
         """Initialize training service."""
-        self.config = config
+        self.config = config or ModelConfig()
         self.model_service = model_service
         self.storage_service = storage_service
         self.feature_extractor = WiFiFeatureExtractor()
         self.model_trainer = ModelTrainer()
         self.export_validator = ExportValidator()
-        self.model_registry = ModelRegistry(config.storage.directory) if config else None
+        self.model_registry = ModelRegistry(self.config.storage.directory) if self.config else None
+        self.model_evaluator = ModelEvaluator(self.config)
+        self.training_pipeline = TrainingPipeline(self.config)
         self.training_tasks: Dict[str, Dict[str, Any]] = {}
     
     async def start_training(self, 
@@ -73,36 +77,24 @@ class TrainingService:
         try:
             # Step 1: Validate export data
             await self._update_progress(training_id, 5, 'Validating export data')
-            is_valid, errors = self.export_validator.validate_export_file(export_file)
-            validation = {'is_valid': is_valid, 'errors': errors}
+            validation_results = await self.training_pipeline.validate_export_for_training(export_file)
             
-            if not validation['is_valid']:
+            if not validation_results['is_valid']:
                 await self._update_progress(training_id, 0, 'Validation failed', 
-                                          error='; '.join(validation['errors']))
+                                          error='; '.join(validation_results['errors']))
                 return
             
-            # Step 2: Load exported data
-            await self._update_progress(training_id, 10, 'Loading export data')
-            exported_data = await self._load_exported_data(export_file)
-            
-            # Step 3: Train model
-            await self._update_progress(training_id, 50, 'Training model')
-            training_result = self.model_trainer.train(exported_data['data'], model_name=model_name)
-            model = training_result.get('model')
-            
-            # Step 4: Get evaluation results from training
-            await self._update_progress(training_id, 85, 'Evaluating model')
-            evaluation_results = training_result.get('evaluation', {})
-            
-            # Step 5: Save model
-            await self._update_progress(training_id, 95, 'Saving model')
-            model_path = await self._save_model_with_metadata(
-                model, training_result.get('features', {}), evaluation_results, export_file, training_id, model_type
+            # Step 2: Run comprehensive training pipeline
+            await self._update_progress(training_id, 10, 'Starting training pipeline')
+            training_result = await self.training_pipeline.run_training_pipeline(
+                export_file_path=export_file,
+                model_type=model_type,
+                model_name=model_name
             )
             
-            # Step 6: Complete
+            # Step 3: Complete
             await self._update_progress(training_id, 100, 'Training completed', 
-                                      result={'model_path': str(model_path)})
+                                      result=training_result)
             
             logger.info(f"Training completed successfully: {training_id}")
             
@@ -201,82 +193,53 @@ class TrainingService:
             self.training_tasks[training_id].update({
                 'progress': progress,
                 'step': step,
-                'error': error,
-                'result': result,
                 'updated_at': datetime.now().isoformat()
             })
             
             if error:
-                self.training_tasks[training_id]['status'] = 'failed'
-            elif progress >= 100:
-                self.training_tasks[training_id]['status'] = 'completed'
+                self.training_tasks[training_id].update({
+                    'status': 'failed',
+                    'error': error
+                })
+            elif result:
+                self.training_tasks[training_id].update({
+                    'status': 'completed',
+                    'result': result
+                })
             else:
                 self.training_tasks[training_id]['status'] = 'running'
-            
-            # Broadcast progress update via WebSocket
-            try:
-                from ..api.routes.websocket import broadcast_training_update, broadcast_error
-                
-                if error:
-                    await broadcast_error(f"Training job {training_id} failed: {error}", "training")
-                else:
-                    await broadcast_training_update(
-                        job_id=training_id,
-                        progress=progress,
-                        status=self.training_tasks[training_id]['status'],
-                        step=step,
-                        result=result
-                    )
-            except ImportError:
-                logger.warning("WebSocket broadcasting not available")
-            except Exception as e:
-                logger.error(f"Failed to broadcast training update: {e}")
     
     def get_training_status(self, training_id: str) -> Optional[Dict[str, Any]]:
-        """Get training status by ID."""
+        """Get training job status."""
         return self.training_tasks.get(training_id)
     
     def list_training_tasks(self) -> Dict[str, Dict[str, Any]]:
         """List all training tasks."""
-        return self.training_tasks.copy()
+        return self.training_tasks
     
     def _get_training_duration(self, training_id: str) -> float:
-        """Get training duration in seconds."""
-        if training_id in self.training_tasks:
-            task = self.training_tasks[training_id]
+        """Get training duration for a task."""
+        task = self.training_tasks.get(training_id)
+        if task and 'start_time' in task:
             start_time = datetime.fromisoformat(task['start_time'])
-            end_time = datetime.fromisoformat(task.get('updated_at', task['start_time']))
+            end_time = datetime.now()
             return (end_time - start_time).total_seconds()
         return 0.0
     
     async def validate_export(self, export_file: str) -> Dict[str, Any]:
-        """Validate an export file."""
-        is_valid, errors = self.export_validator.validate_export_file(export_file)
-        return {'is_valid': is_valid, 'errors': errors}
+        """Validate export file for training."""
+        return await self.training_pipeline.validate_export_for_training(export_file)
     
     def get_model_registry(self) -> ModelRegistry:
-        """Get model registry instance."""
+        """Get model registry."""
         return self.model_registry
     
     async def shutdown(self):
-        """Shutdown the training service and cleanup resources."""
-        logger.info("Shutting down TrainingService...")
-        
-        # Cancel any running training tasks
-        for training_id, task_info in self.training_tasks.items():
-            if task_info['status'] in ['running', 'initializing']:
-                logger.info(f"Cancelling training task: {training_id}")
+        """Shutdown the training service."""
+        # Cancel any running tasks
+        for task_id, task_info in self.training_tasks.items():
+            if task_info['status'] == 'running':
                 task_info['status'] = 'cancelled'
-                task_info['step'] = 'Cancelled during shutdown'
+                task_info['error'] = 'Service shutdown'
         
-        # Clear training tasks
-        self.training_tasks.clear()
-        
-        # Cleanup other resources if needed
-        if hasattr(self.feature_extractor, 'shutdown'):
-            await self.feature_extractor.shutdown()
-        
-        if hasattr(self.model_trainer, 'shutdown'):
-            await self.model_trainer.shutdown()
-        
-        logger.info("TrainingService shutdown complete") 
+        logger.info("Training service shutdown complete") 
