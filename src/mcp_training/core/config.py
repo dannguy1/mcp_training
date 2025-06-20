@@ -90,12 +90,11 @@ class TrainingConfig(BaseSettings):
         self._model_config: Optional[Dict[str, Any]] = None
         self._training_config: Optional[Dict[str, Any]] = None
     
-    @validator('cors_origins', pre=True)
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from comma-separated string to list."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v
+    def get_cors_origins_list(self) -> List[str]:
+        """Get CORS origins as a list."""
+        if isinstance(self.cors_origins, str):
+            return [origin.strip() for origin in self.cors_origins.split(',') if origin.strip()]
+        return []
     
     @property
     def model_config_data(self) -> Dict[str, Any]:
@@ -422,7 +421,7 @@ def get_config():
             "logs_dir": config.logs_dir
         },
         "cors": {
-            "allowed_origins": config.cors_origins if isinstance(config.cors_origins, list) else [config.cors_origins],
+            "allowed_origins": config.get_cors_origins_list(),
             "allowed_methods": ["*"],
             "allowed_headers": ["*"],
             "allow_credentials": True
