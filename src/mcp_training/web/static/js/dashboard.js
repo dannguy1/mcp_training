@@ -351,9 +351,12 @@ class DashboardManager {
         
         // Calculate pass/fail rates
         const passCount = evaluatedJobs.filter(job => {
-            const eval = job.evaluation_results;
-            return eval.threshold_checks && 
-                   Object.values(eval.threshold_checks).every(check => check.passed);
+            const evaluation = job.evaluation_results;
+            if (evaluation.threshold_checks) {
+                const allPassed = Object.values(evaluation.threshold_checks).every(check => check.passed);
+                return allPassed;
+            }
+            return false;
         }).length;
         
         const failCount = evaluatedJobs.length - passCount;

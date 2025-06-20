@@ -25,6 +25,8 @@ class TrainingManager {
     }
     
     setupEventListeners() {
+        console.log('Setting up event listeners...');
+        
         // Search and filter
         const searchInput = document.getElementById('searchInput');
         const statusFilter = document.getElementById('statusFilter');
@@ -58,6 +60,46 @@ class TrainingManager {
             });
         }
         
+        // New Training Job button
+        const newTrainingJobBtn = document.getElementById('newTrainingJobBtn');
+        console.log('New Training Job button found:', !!newTrainingJobBtn);
+        if (newTrainingJobBtn) {
+            newTrainingJobBtn.addEventListener('click', () => {
+                console.log('New Training Job button clicked');
+                this.openTrainingModal();
+            });
+        }
+        
+        // Submit Training button
+        const submitTrainingBtn = document.getElementById('submitTrainingBtn');
+        console.log('Submit Training button found:', !!submitTrainingBtn);
+        if (submitTrainingBtn) {
+            submitTrainingBtn.addEventListener('click', () => {
+                console.log('Submit Training button clicked');
+                this.submitTraining();
+            });
+        }
+        
+        // Refresh Jobs button
+        const refreshJobsBtn = document.getElementById('refreshJobsBtn');
+        console.log('Refresh Jobs button found:', !!refreshJobsBtn);
+        if (refreshJobsBtn) {
+            refreshJobsBtn.addEventListener('click', () => {
+                console.log('Refresh Jobs button clicked');
+                this.refresh();
+            });
+        }
+        
+        // Export Jobs button
+        const exportJobsBtn = document.getElementById('exportJobsBtn');
+        console.log('Export Jobs button found:', !!exportJobsBtn);
+        if (exportJobsBtn) {
+            exportJobsBtn.addEventListener('click', () => {
+                console.log('Export Jobs button clicked');
+                this.exportJobs();
+            });
+        }
+        
         // Modal events
         const newTrainingModal = document.getElementById('newTrainingModal');
         if (newTrainingModal) {
@@ -73,6 +115,8 @@ class TrainingManager {
                 this.confirmDelete();
             });
         }
+        
+        console.log('Event listeners setup completed');
     }
     
     async loadTrainingJobs() {
@@ -112,9 +156,9 @@ class TrainingManager {
             let evalStatusClass = 'secondary';
             
             if (job.status === 'completed' && job.evaluation_results) {
-                const eval = job.evaluation_results;
-                if (eval.threshold_checks) {
-                    const allPassed = Object.values(eval.threshold_checks).every(check => check.passed);
+                const evaluation = job.evaluation_results;
+                if (evaluation.threshold_checks) {
+                    const allPassed = Object.values(evaluation.threshold_checks).every(check => check.passed);
                     evalStatus = allPassed ? 'PASS' : 'FAIL';
                     evalStatusClass = allPassed ? 'success' : 'danger';
                 } else {
@@ -232,6 +276,11 @@ class TrainingManager {
     
     async submitTraining() {
         try {
+            // Validate form first
+            if (!this.validateForm()) {
+                return;
+            }
+            
             utils.showLoading();
             
             const exportFileSelect = document.getElementById('exportFile');
@@ -372,7 +421,7 @@ class TrainingManager {
 
         // Add comprehensive evaluation results if available
         if (job.evaluation_results) {
-            const eval = job.evaluation_results;
+            const evaluation = job.evaluation_results;
             jobDetailsHtml += `
                 <div class="row mt-4">
                     <div class="col-12">
@@ -383,17 +432,17 @@ class TrainingManager {
                                     <div class="col-md-6">
                                         <h6 class="text-primary">Performance Metrics</h6>
                                         <table class="table table-sm">
-                                            <tr><td>Accuracy:</td><td><strong>${(eval.accuracy * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>Precision:</td><td><strong>${(eval.precision * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>Recall:</td><td><strong>${(eval.recall * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>F1 Score:</td><td><strong>${(eval.f1_score * 100).toFixed(2)}%</strong></td></tr>
-                                            <tr><td>ROC AUC:</td><td><strong>${(eval.roc_auc * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>Accuracy:</td><td><strong>${(evaluation.accuracy * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>Precision:</td><td><strong>${(evaluation.precision * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>Recall:</td><td><strong>${(evaluation.recall * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>F1 Score:</td><td><strong>${(evaluation.f1_score * 100).toFixed(2)}%</strong></td></tr>
+                                            <tr><td>ROC AUC:</td><td><strong>${(evaluation.roc_auc * 100).toFixed(2)}%</strong></td></tr>
                                         </table>
                                     </div>
                                     <div class="col-md-6">
                                         <h6 class="text-primary">Threshold Checks</h6>
                                         <table class="table table-sm">
-                                            ${eval.threshold_checks ? Object.entries(eval.threshold_checks).map(([metric, result]) => `
+                                            ${evaluation.threshold_checks ? Object.entries(evaluation.threshold_checks).map(([metric, result]) => `
                                                 <tr>
                                                     <td>${metric}:</td>
                                                     <td>
@@ -565,11 +614,14 @@ class TrainingManager {
     }
     
     handleExportFileSelect() {
-        const select = document.getElementById('exportFile');
-        const submitBtn = document.querySelector('#newTrainingModal .btn-primary');
-        
-        if (select && submitBtn) {
-            submitBtn.disabled = !select.value;
+        const exportFile = document.getElementById('exportFile');
+        if (exportFile && exportFile.value) {
+            console.log('Export file selected:', exportFile.value);
+            // Enable submit button when file is selected
+            const submitBtn = document.querySelector('#newTrainingModal .btn-primary');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+            }
         }
     }
     
@@ -579,6 +631,13 @@ class TrainingManager {
             form.reset();
         }
         
+        // Reset export file dropdown
+        const exportFile = document.getElementById('exportFile');
+        if (exportFile) {
+            exportFile.innerHTML = '<option value="">Select an export file...</option>';
+        }
+        
+        // Disable submit button initially
         const submitBtn = document.querySelector('#newTrainingModal .btn-primary');
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -619,64 +678,154 @@ class TrainingManager {
         utils.downloadFile(url, 'training-jobs.json');
     }
     
+    async loadExportFiles() {
+        console.log('TrainingManager.loadExportFiles called');
+        try {
+            const exports = await utils.apiCall('/training/exports');
+            console.log('Export files loaded:', exports);
+            const select = document.getElementById('exportFile');
+            if (!select) {
+                console.warn('Export file select element not found');
+                return;
+            }
+            select.innerHTML = '<option value="">Select an export file...</option>';
+            exports.forEach(exportFile => {
+                const option = document.createElement('option');
+                option.value = exportFile.path;
+                option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
+                select.appendChild(option);
+            });
+            console.log('Export file dropdown updated with', exports.length, 'files');
+        } catch (error) {
+            console.error('Error loading export files:', error);
+            utils.showError('Failed to load export files', error);
+        }
+    }
+    
+    openTrainingModal() {
+        console.log('TrainingManager.openTrainingModal called');
+        
+        // Check if Bootstrap is available
+        if (typeof bootstrap === 'undefined') {
+            console.error('Bootstrap is not loaded!');
+            utils.showError('Bootstrap is not loaded. Please refresh the page.');
+            return;
+        }
+        
+        // Check if modal element exists
+        const modalElement = document.getElementById('newTrainingModal');
+        if (!modalElement) {
+            console.error('Modal element not found!');
+            utils.showError('Modal element not found. Please refresh the page.');
+            return;
+        }
+        
+        console.log('Modal element found:', modalElement);
+        
+        try {
+            const modal = new bootstrap.Modal(modalElement);
+            console.log('Bootstrap modal created:', modal);
+            modal.show();
+            console.log('Modal shown successfully');
+            
+            // Load export files after a short delay to ensure modal is rendered
+            setTimeout(() => {
+                console.log('Loading export files...');
+                this.loadExportFiles();
+            }, 100);
+        } catch (error) {
+            console.error('Error showing modal:', error);
+            utils.showError('Failed to show modal: ' + error.message);
+        }
+    }
+    
+    validateForm() {
+        const jobName = document.getElementById('jobName')?.value;
+        const modelConfig = document.getElementById('modelConfig')?.value;
+        const exportFile = document.getElementById('exportFile')?.value;
+        
+        const errors = [];
+        
+        if (!jobName?.trim()) {
+            errors.push('Job name is required');
+        }
+        
+        if (!modelConfig) {
+            errors.push('Model configuration is required');
+        }
+        
+        if (!exportFile) {
+            errors.push('Export file is required');
+        }
+        
+        if (errors.length > 0) {
+            utils.showError('Please fix the following errors:\n' + errors.join('\n'));
+            return false;
+        }
+        
+        return true;
+    }
+    
     destroy() {
         this.stopAutoRefresh();
     }
 }
 
-// Global functions for use in HTML
-window.openTrainingModal = () => {
-    console.log('openTrainingModal called');
-    const modal = new bootstrap.Modal(document.getElementById('newTrainingModal'));
-    modal.show();
-    // Load export files after a short delay to ensure modal is rendered
-    setTimeout(() => {
-        if (window.trainingManager) {
-            window.trainingManager.loadExportFiles();
-        } else {
-            console.warn('trainingManager not available yet');
-        }
-    }, 100);
-};
-
-window.submitTraining = () => {
-    if (window.trainingManager) {
-        window.trainingManager.submitTraining();
-    } else {
-        console.warn('trainingManager not available yet');
-    }
-};
-
-// Function to load export files and populate the dropdown
-window.loadExportFiles = async function() {
-    console.log('Attempting to load export files...');
-    try {
-        const exports = await utils.apiCall('/training/exports');
-        console.log('Export files loaded:', exports);
-        const select = document.getElementById('exportFile');
-        if (!select) {
-            console.warn('Export file select element not found');
-            return;
-        }
-        select.innerHTML = '<option value="">Select an export file...</option>';
-        exports.forEach(exportFile => {
-            const option = document.createElement('option');
-            option.value = exportFile.path;
-            option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
-            select.appendChild(option);
-        });
-        console.log('Export file dropdown updated with', exports.length, 'files');
-    } catch (error) {
-        console.error('Error loading export files:', error);
-        utils.showError('Failed to load export files', error);
-    }
-};
-
 // Initialize training manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing TrainingManager...');
-    window.trainingManager = new TrainingManager();
-    console.log('TrainingManager initialized:', window.trainingManager);
+    
+    // Check if we're on the training page
+    const trainingTable = document.getElementById('trainingTable');
+    if (!trainingTable) {
+        console.log('Not on training page, skipping TrainingManager initialization');
+        return;
+    }
+    
+    try {
+        window.trainingManager = new TrainingManager();
+        console.log('TrainingManager initialized successfully:', window.trainingManager);
+        
+        // Add fallback global functions for backward compatibility
+        window.openTrainingModal = () => {
+            console.log('Global openTrainingModal called (fallback)');
+            if (window.trainingManager) {
+                window.trainingManager.openTrainingModal();
+            } else {
+                console.error('TrainingManager not available');
+            }
+        };
+        
+        window.submitTraining = () => {
+            console.log('Global submitTraining called (fallback)');
+            if (window.trainingManager) {
+                window.trainingManager.submitTraining();
+            } else {
+                console.error('TrainingManager not available');
+            }
+        };
+        
+        // Test modal functionality
+        console.log('Testing modal functionality...');
+        const modalElement = document.getElementById('newTrainingModal');
+        if (modalElement) {
+            console.log('Modal element found and ready');
+        } else {
+            console.error('Modal element not found during initialization');
+        }
+        
+        // Test export file loading
+        console.log('Testing export file loading...');
+        window.trainingManager.loadExportFiles().then(() => {
+            console.log('Export files loaded successfully during initialization');
+        }).catch(error => {
+            console.error('Failed to load export files during initialization:', error);
+        });
+        
+    } catch (error) {
+        console.error('Failed to initialize TrainingManager:', error);
+        utils.showError('Failed to initialize training manager: ' + error.message);
+    }
 });
 
 console.log('=== TRAINING.JS SCRIPT COMPLETED ==='); 

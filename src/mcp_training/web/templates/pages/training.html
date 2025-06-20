@@ -7,7 +7,7 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Training Management</h2>
-            <button class="btn btn-primary" onclick="openTrainingModal()">
+            <button class="btn btn-primary" id="newTrainingJobBtn" onclick="console.log('Button clicked via onclick'); if(window.trainingManager) window.trainingManager.openTrainingModal(); else console.error('TrainingManager not available');">
                 <i class="bi bi-plus me-2"></i>
                 New Training Job
             </button>
@@ -42,10 +42,10 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h6 class="mb-0">Training Jobs</h6>
         <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-secondary" onclick="trainingManager.refresh()">
+            <button type="button" class="btn btn-outline-secondary" id="refreshJobsBtn">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
-            <button type="button" class="btn btn-outline-secondary" onclick="trainingManager.exportJobs()">
+            <button type="button" class="btn btn-outline-secondary" id="exportJobsBtn">
                 <i class="bi bi-download"></i>
             </button>
         </div>
@@ -146,7 +146,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitTraining()">
+                <button type="button" class="btn btn-primary" id="submitTrainingBtn">
                     <i class="bi bi-play me-2"></i>
                     Start Training
                 </button>
