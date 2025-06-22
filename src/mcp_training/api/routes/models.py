@@ -667,7 +667,7 @@ async def download_deployment_package(version: str, model_service: ModelService 
         if not model:
             raise HTTPException(status_code=404, detail=f"Model {version} not found")
         
-        if model.status != "deployed":
+        if model.deployment_info.status != "deployed":
             raise HTTPException(status_code=400, detail=f"Model {version} is not deployed")
         
         # Check if deployment package exists

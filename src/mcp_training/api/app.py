@@ -46,14 +46,26 @@ async def lifespan(app: FastAPI):
         )
         
         # Initialize services
+        # Get the project root directory (parent of current working directory)
+        project_root = Path.cwd().parent
+        
+        models_dir = str(project_root / config.get("storage", {}).get("models_dir", "models"))
+        exports_dir = str(project_root / config.get("storage", {}).get("exports_dir", "exports"))
+        logs_dir = str(project_root / config.get("storage", {}).get("logs_dir", "logs"))
+        
+        logger.info(f"Project root: {project_root}")
+        logger.info(f"Models directory: {models_dir}")
+        logger.info(f"Exports directory: {exports_dir}")
+        logger.info(f"Logs directory: {logs_dir}")
+        
         storage_service = StorageService(
-            models_dir=config.get("storage", {}).get("models_dir", "models"),
-            exports_dir=config.get("storage", {}).get("exports_dir", "exports"),
-            logs_dir=config.get("storage", {}).get("logs_dir", "logs")
+            models_dir=models_dir,
+            exports_dir=exports_dir,
+            logs_dir=logs_dir
         )
         
         model_service = ModelService(
-            models_dir=config.get("storage", {}).get("models_dir", "models")
+            models_dir=models_dir
         )
         
         training_service = TrainingService(
