@@ -30,6 +30,7 @@ class ModelInfo(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     
     version: str = Field(..., description="Model version")
+    id: str = Field(..., description="Model ID (same as version)")
     name: str = Field(..., description="Model name")
     type: str = Field(..., description="Model type")
     status: str = Field(..., description="Model status")
@@ -39,6 +40,7 @@ class ModelInfo(BaseModel):
     deployed_by: Optional[str] = Field(None, description="User who deployed the model")
     metrics: Optional[Dict[str, Any]] = Field(None, description="Model metrics")
     file_size: Optional[int] = Field(None, description="Model file size in bytes")
+    size: int = Field(0, description="Model file size in bytes (for frontend)")
 
 
 class ModelList(BaseModel):
@@ -130,8 +132,19 @@ async def get_models(
             else:
                 status = 'ready'  # Default to ready for other statuses
             
+            # Try to get file size from metadata, else from model.joblib
+            file_size = model.get('file_size')
+            if not file_size:
+                # Try to get from model.joblib
+                model_path = Path(model['path']) / 'model.joblib'
+                if model_path.exists():
+                    file_size = model_path.stat().st_size
+                else:
+                    file_size = 0
+            
             model_info = ModelInfo(
                 version=model['version'],
+                id=model['version'],
                 name=f"Model {model['version']}",
                 type=model['model_type'],
                 status=status,
@@ -140,29 +153,12 @@ async def get_models(
                 deployed_at=None,  # Will be set when deployed
                 deployed_by=None,  # Will be set when deployed
                 metrics=None,  # Could be added later
-                file_size=None  # Could be calculated later
+                file_size=file_size,
+                size=file_size
             )
             model_list.append(model_info)
         
-        # Convert to frontend expected format
-        frontend_models = []
-        for model_info in model_list:
-            frontend_model = {
-                'id': model_info.version,  # Use version as ID
-                'name': model_info.name,
-                'version': model_info.version,
-                'type': model_info.type,
-                'status': model_info.status,
-                'created_at': model_info.created_at,
-                'updated_at': model_info.updated_at,
-                'size': model_info.file_size or 0,  # Default to 0 if not available
-                'performance': None,  # Could be added later from metrics
-                'deployed_at': model_info.deployed_at,
-                'deployed_by': model_info.deployed_by
-            }
-            frontend_models.append(frontend_model)
-        
-        return frontend_models
+        return model_list
         
     except Exception as e:
         logger.error(f"Error getting models: {e}")
@@ -214,8 +210,19 @@ async def list_models(
             else:
                 status = 'ready'  # Default to ready for other statuses
             
+            # Try to get file size from metadata, else from model.joblib
+            file_size = model.get('file_size')
+            if not file_size:
+                # Try to get from model.joblib
+                model_path = Path(model['path']) / 'model.joblib'
+                if model_path.exists():
+                    file_size = model_path.stat().st_size
+                else:
+                    file_size = 0
+            
             model_info = ModelInfo(
                 version=model['version'],
+                id=model['version'],
                 name=f"Model {model['version']}",
                 type=model['model_type'],
                 status=status,
@@ -224,7 +231,8 @@ async def list_models(
                 deployed_at=None,  # Will be set when deployed
                 deployed_by=None,  # Will be set when deployed
                 metrics=None,  # Could be added later
-                file_size=None  # Could be calculated later
+                file_size=file_size,
+                size=file_size
             )
             model_list.append(model_info)
         
@@ -268,8 +276,20 @@ async def get_model(
         else:
             status = 'ready'  # Default to ready for other statuses
         
+        # Try to get file size from metadata, else from model.joblib
+        file_size = model_metadata.training_info.export_file_size
+        if not file_size:
+            # Try to get from model.joblib
+            model_dir = Path(model_metadata.model_info.version)
+            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
+            if model_path.exists():
+                file_size = model_path.stat().st_size
+            else:
+                file_size = 0
+        
         model_info = ModelInfo(
             version=model_metadata.model_info.version,
+            id=model_metadata.model_info.version,
             name=f"Model {model_metadata.model_info.version}",
             type=model_metadata.model_info.model_type,
             status=status,
@@ -278,7 +298,8 @@ async def get_model(
             deployed_at=model_metadata.deployment_info.deployed_at,
             deployed_by=model_metadata.deployment_info.deployed_by,
             metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
-            file_size=model_metadata.training_info.export_file_size
+            file_size=file_size,
+            size=file_size
         )
         
         return model_info
@@ -378,8 +399,20 @@ async def get_latest_model(
         else:
             status = 'ready'  # Default to ready for other statuses
         
+        # Try to get file size from metadata, else from model.joblib
+        file_size = model_metadata.training_info.export_file_size
+        if not file_size:
+            # Try to get from model.joblib
+            model_dir = Path(model_metadata.model_info.version)
+            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
+            if model_path.exists():
+                file_size = model_path.stat().st_size
+            else:
+                file_size = 0
+        
         model_info = ModelInfo(
             version=model_metadata.model_info.version,
+            id=model_metadata.model_info.version,
             name=f"Model {model_metadata.model_info.version}",
             type=model_metadata.model_info.model_type,
             status=status,
@@ -388,7 +421,8 @@ async def get_latest_model(
             deployed_at=model_metadata.deployment_info.deployed_at,
             deployed_by=model_metadata.deployment_info.deployed_by,
             metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
-            file_size=model_metadata.training_info.export_file_size
+            file_size=file_size,
+            size=file_size
         )
         
         return model_info
@@ -428,8 +462,20 @@ async def get_deployed_model(
         else:
             status = 'ready'  # Default to ready for other statuses
         
+        # Try to get file size from metadata, else from model.joblib
+        file_size = model_metadata.training_info.export_file_size
+        if not file_size:
+            # Try to get from model.joblib
+            model_dir = Path(model_metadata.model_info.version)
+            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
+            if model_path.exists():
+                file_size = model_path.stat().st_size
+            else:
+                file_size = 0
+        
         model_info = ModelInfo(
             version=model_metadata.model_info.version,
+            id=model_metadata.model_info.version,
             name=f"Model {model_metadata.model_info.version}",
             type=model_metadata.model_info.model_type,
             status=status,
@@ -438,7 +484,8 @@ async def get_deployed_model(
             deployed_at=model_metadata.deployment_info.deployed_at,
             deployed_by=model_metadata.deployment_info.deployed_by,
             metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
-            file_size=model_metadata.training_info.export_file_size
+            file_size=file_size,
+            size=file_size
         )
         
         return model_info
