@@ -36,7 +36,7 @@ class EvaluationInfo(BaseModel):
     """Evaluation information."""
     model_config = ConfigDict(protected_namespaces=())
     
-    basic_metrics: Dict[str, float] = Field(default_factory=dict, description="Basic metrics")
+    basic_metrics: Dict[str, Optional[float]] = Field(default_factory=dict, description="Basic metrics")
     score_distribution: Dict[str, Any] = Field(default_factory=dict, description="Score distribution")
     cross_validation_score: Optional[float] = Field(None, description="Cross-validation score")
     feature_importance: Optional[Dict[str, float]] = Field(None, description="Feature importance")
