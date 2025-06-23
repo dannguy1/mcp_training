@@ -17,7 +17,7 @@ class ModelInfo(BaseModel):
     created_at: str = Field(..., description="Creation timestamp")
     model_type: str = Field(..., description="Type of model")
     training_source: str = Field(default="export_data", description="Training data source")
-    export_file: Optional[str] = Field(None, description="Source export file")
+    export_files: Optional[List[str]] = Field(None, description="Source export files")
     training_id: Optional[str] = Field(None, description="Training job ID")
 
 
@@ -27,7 +27,7 @@ class TrainingInfo(BaseModel):
     
     training_samples: int = Field(..., description="Number of training samples")
     feature_names: List[str] = Field(default_factory=list, description="Feature names")
-    export_file_size: Optional[int] = Field(None, description="Export file size")
+    export_files_size: Optional[int] = Field(None, description="Total export files size")
     training_duration: Optional[float] = Field(None, description="Training duration in seconds")
     model_parameters: Dict[str, Any] = Field(default_factory=dict, description="Model parameters")
 
@@ -67,7 +67,7 @@ class ModelMetadata(BaseModel):
                model_type: str,
                training_samples: int,
                feature_names: List[str],
-               export_file: Optional[str] = None,
+               export_files: Optional[List[str]] = None,
                training_id: Optional[str] = None,
                model_parameters: Optional[Dict[str, Any]] = None) -> 'ModelMetadata':
         """Create new model metadata."""
@@ -77,7 +77,7 @@ class ModelMetadata(BaseModel):
                 created_at=datetime.now().isoformat(),
                 model_type=model_type,
                 training_source="export_data",
-                export_file=export_file,
+                export_files=export_files,
                 training_id=training_id
             ),
             training_info=TrainingInfo(
@@ -119,7 +119,7 @@ class ModelMetadata(BaseModel):
 
     def update_export_file_size(self, file_size: int):
         """Update export file size."""
-        self.training_info.export_file_size = file_size
+        self.training_info.export_files_size = file_size
 
     def deploy(self, deployed_by: Optional[str] = None):
         """Mark model as deployed."""

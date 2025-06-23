@@ -46,10 +46,10 @@ class TrainingManager {
         }
         
         // Export file selection
-        const exportFile = document.getElementById('exportFile');
-        if (exportFile) {
-            exportFile.addEventListener('change', () => {
-                this.handleExportFileSelect();
+        const exportFiles = document.getElementById('exportFiles');
+        if (exportFiles) {
+            exportFiles.addEventListener('change', () => {
+                this.handleExportFilesSelect();
             });
         }
         
@@ -301,19 +301,22 @@ class TrainingManager {
             
             utils.showLoading();
             
-            const exportFileSelect = document.getElementById('exportFile');
+            const exportFilesSelect = document.getElementById('exportFiles');
             const jobName = document.getElementById('jobName')?.value;
             const modelConfig = document.getElementById('modelConfig')?.value;
             const maxIterations = document.getElementById('maxIterations')?.value;
             const learningRate = document.getElementById('learningRate')?.value;
             const description = document.getElementById('description')?.value;
             
-            if (!exportFileSelect?.value) {
-                throw new Error('Please select an export file');
+            // Get all selected export files
+            const selectedFiles = Array.from(exportFilesSelect.selectedOptions).map(option => option.value);
+            
+            if (selectedFiles.length === 0) {
+                throw new Error('Please select at least one export file');
             }
             
             const requestData = {
-                export_file: exportFileSelect.value,
+                export_files: selectedFiles,
                 model_cfg: {
                     type: modelConfig || "isolation_forest",
                     name: jobName || "Training Job"
@@ -345,7 +348,6 @@ class TrainingManager {
             this.loadTrainingJobs();
             
         } catch (error) {
-            console.error('Error submitting training job:', error);
             utils.showError('Failed to start training job', error);
         } finally {
             utils.hideLoading();
@@ -603,6 +605,25 @@ class TrainingManager {
             }
         }
 
+        // Display export file information
+        if (job.export_files && job.export_files.length > 0) {
+            const exportFilesHtml = job.export_files.map(file => {
+                const fileName = file.split('/').pop(); // Get just the filename
+                return `<li><code>${fileName}</code></li>`;
+            }).join('');
+            
+            jobDetailsHtml += `
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6><i class="bi bi-file-earmark-text me-2"></i>Export Files (${job.export_files.length})</h6>
+                        <ul class="list-unstyled">
+                            ${exportFilesHtml}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
         content.innerHTML = jobDetailsHtml;
         console.log('Final job details HTML length:', jobDetailsHtml.length);
         console.log('Modal content element:', content);
@@ -639,11 +660,12 @@ class TrainingManager {
         return utils.formatDuration(duration);
     }
     
-    handleExportFileSelect() {
-        const exportFile = document.getElementById('exportFile');
-        if (exportFile && exportFile.value) {
-            console.log('Export file selected:', exportFile.value);
-            // Enable submit button when file is selected
+    handleExportFilesSelect() {
+        const exportFiles = document.getElementById('exportFiles');
+        if (exportFiles && exportFiles.selectedOptions.length > 0) {
+            const selectedCount = exportFiles.selectedOptions.length;
+            console.log(`Export files selected: ${selectedCount} files`);
+            // Enable submit button when files are selected
             const submitBtn = document.querySelector('#newTrainingModal .btn-primary');
             if (submitBtn) {
                 submitBtn.disabled = false;
@@ -651,19 +673,27 @@ class TrainingManager {
         }
     }
     
-    resetForm() {
-        const form = document.getElementById('trainingForm');
-        if (form) {
-            form.reset();
+    resetTrainingForm() {
+        // Reset form fields
+        const jobName = document.getElementById('jobName');
+        const modelConfig = document.getElementById('modelConfig');
+        const maxIterations = document.getElementById('maxIterations');
+        const learningRate = document.getElementById('learningRate');
+        const description = document.getElementById('description');
+        
+        if (jobName) jobName.value = '';
+        if (modelConfig) modelConfig.value = '';
+        if (maxIterations) maxIterations.value = '1000';
+        if (learningRate) learningRate.value = '0.01';
+        if (description) description.value = '';
+        
+        // Reset export files dropdown
+        const exportFiles = document.getElementById('exportFiles');
+        if (exportFiles) {
+            exportFiles.innerHTML = '<option value="">Select export files...</option>';
         }
         
-        // Reset export file dropdown
-        const exportFile = document.getElementById('exportFile');
-        if (exportFile) {
-            exportFile.innerHTML = '<option value="">Select an export file...</option>';
-        }
-        
-        // Disable submit button initially
+        // Disable submit button
         const submitBtn = document.querySelector('#newTrainingModal .btn-primary');
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -709,19 +739,19 @@ class TrainingManager {
         try {
             const exports = await utils.apiCall('/training/exports');
             console.log('Export files loaded:', exports);
-            const select = document.getElementById('exportFile');
+            const select = document.getElementById('exportFiles');
             if (!select) {
-                console.warn('Export file select element not found');
+                console.warn('Export files select element not found');
                 return;
             }
-            select.innerHTML = '<option value="">Select an export file...</option>';
+            select.innerHTML = '<option value="">Select export files...</option>';
             exports.forEach(exportFile => {
                 const option = document.createElement('option');
                 option.value = exportFile.path;
                 option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
                 select.appendChild(option);
             });
-            console.log('Export file dropdown updated with', exports.length, 'files');
+            console.log('Export files dropdown updated with', exports.length, 'files');
         } catch (error) {
             console.error('Error loading export files:', error);
             utils.showError('Failed to load export files', error);
@@ -768,7 +798,7 @@ class TrainingManager {
     validateForm() {
         const jobName = document.getElementById('jobName')?.value;
         const modelConfig = document.getElementById('modelConfig')?.value;
-        const exportFile = document.getElementById('exportFile')?.value;
+        const exportFiles = document.getElementById('exportFiles');
         
         const errors = [];
         
@@ -780,8 +810,8 @@ class TrainingManager {
             errors.push('Model configuration is required');
         }
         
-        if (!exportFile) {
-            errors.push('Export file is required');
+        if (!exportFiles || exportFiles.selectedOptions.length === 0) {
+            errors.push('At least one export file is required');
         }
         
         if (errors.length > 0) {
@@ -1088,18 +1118,6 @@ class TrainingManager {
                 this.uploadFile();
             };
             uploadBtn.addEventListener('click', this.uploadBtnClickHandler);
-        }
-    }
-    
-    resetTrainingForm() {
-        const form = document.getElementById('trainingForm');
-        if (form) {
-            form.reset();
-        }
-        
-        const submitBtn = document.getElementById('submitTrainingBtn');
-        if (submitBtn) {
-            submitBtn.disabled = false;
         }
     }
 }

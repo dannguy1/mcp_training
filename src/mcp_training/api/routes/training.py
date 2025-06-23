@@ -26,9 +26,10 @@ class TrainingRequest(BaseModel):
     """Training request model."""
     model_config = ConfigDict(protected_namespaces=())
     
-    export_file: str = Field(..., description="Path to export file")
+    export_files: List[str] = Field(..., description="List of paths to export files")
     model_cfg: Optional[Dict[str, Any]] = Field(None, description="Model configuration")
     training_config: Optional[Dict[str, Any]] = Field(None, description="Training configuration")
+    description: Optional[str] = Field(None, description="Training job description")
 
 
 class TrainingResponse(BaseModel):
@@ -77,24 +78,27 @@ async def start_training(
         Training response with job ID
     """
     try:
-        logger.info(f"Starting training job for export: {request.export_file}")
+        logger.info(f"Starting training job for export: {request.export_files}")
         
-        # Validate export file
-        export_path = Path(request.export_file)
-        if not export_path.exists():
-            raise HTTPException(status_code=404, detail=f"Export file not found: {request.export_file}")
+        # Validate export files
+        for export_file in request.export_files:
+            export_path = Path(export_file)
+            if not export_path.exists():
+                raise HTTPException(status_code=404, detail=f"Export file not found: {export_file}")
         
-        # Validate file extension
-        if not validate_file_extension(export_path, ["json"]):
-            raise HTTPException(status_code=400, detail="Export file must be a JSON file")
+        # Validate file extensions
+        for export_file in request.export_files:
+            if not validate_file_extension(Path(export_file), ["json"]):
+                raise HTTPException(status_code=400, detail=f"Export file must be a JSON file: {export_file}")
         
-        # Validate file size (max 100MB)
-        if not validate_file_size(export_path, 100):
-            raise HTTPException(status_code=400, detail="Export file too large (max 100MB)")
+        # Validate file sizes (max 100MB each)
+        for export_file in request.export_files:
+            if not validate_file_size(Path(export_file), 100):
+                raise HTTPException(status_code=400, detail=f"Export file too large (max 100MB): {export_file}")
         
         # Start training job
         training_id = await training_service.start_training(
-            export_file=str(export_path),
+            export_files=request.export_files,
             model_type=request.model_cfg.get("type", "isolation_forest") if request.model_cfg else "isolation_forest",
             model_name=request.model_cfg.get("name") if request.model_cfg else None,
             config_overrides=request.training_config
@@ -158,7 +162,7 @@ async def upload_and_train(
         
         # Start training job
         training_id = await training_service.start_training(
-            export_file=str(stored_path),
+            export_files=[str(stored_path)],
             model_type=model_cfg.get("type", "isolation_forest") if model_cfg else "isolation_forest",
             model_name=model_cfg.get("name") if model_cfg else None,
             config_overrides=training_config
@@ -468,24 +472,27 @@ async def create_training_job(
         Training response with job ID
     """
     try:
-        logger.info(f"Creating training job for export: {request.export_file}")
+        logger.info(f"Creating training job for export: {request.export_files}")
         
-        # Validate export file
-        export_path = Path(request.export_file)
-        if not export_path.exists():
-            raise HTTPException(status_code=404, detail=f"Export file not found: {request.export_file}")
+        # Validate export files
+        for export_file in request.export_files:
+            export_path = Path(export_file)
+            if not export_path.exists():
+                raise HTTPException(status_code=404, detail=f"Export file not found: {export_file}")
         
-        # Validate file extension
-        if not validate_file_extension(export_path, ["json"]):
-            raise HTTPException(status_code=400, detail="Export file must be a JSON file")
+        # Validate file extensions
+        for export_file in request.export_files:
+            if not validate_file_extension(Path(export_file), ["json"]):
+                raise HTTPException(status_code=400, detail=f"Export file must be a JSON file: {export_file}")
         
-        # Validate file size (max 100MB)
-        if not validate_file_size(export_path, 100):
-            raise HTTPException(status_code=400, detail="Export file too large (max 100MB)")
+        # Validate file sizes (max 100MB each)
+        for export_file in request.export_files:
+            if not validate_file_size(Path(export_file), 100):
+                raise HTTPException(status_code=400, detail=f"Export file too large (max 100MB): {export_file}")
         
         # Start training job
         training_id = await training_service.start_training(
-            export_file=str(export_path),
+            export_files=request.export_files,
             model_type=request.model_cfg.get("type", "isolation_forest") if request.model_cfg else "isolation_forest",
             model_name=request.model_cfg.get("name") if request.model_cfg else None,
             config_overrides=request.training_config

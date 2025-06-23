@@ -33,62 +33,74 @@ class TrainingPipeline:
         self.registry = ModelRegistry(config.storage.directory)
     
     async def run_training_pipeline(self, 
-                                  export_file_path: str,
+                                  export_file_paths: List[str],
                                   model_type: str = "isolation_forest",
                                   model_name: Optional[str] = None,
                                   training_id: Optional[str] = None) -> Dict[str, Any]:
-        """Run complete training pipeline."""
+        """Run complete training pipeline with multiple export files."""
         pipeline_start = datetime.now()
         
         try:
-            logger.info("Starting training pipeline")
+            logger.info(f"Starting training pipeline with {len(export_file_paths)} export files")
             
-            # Step 1: Load and validate export data
-            logger.info("Loading and validating export data")
-            exported_data = await self._load_exported_data(export_file_path)
+            # Step 1: Load and validate export data from all files
+            logger.info("Loading and validating export data from all files")
+            all_exported_data = []
+            total_log_entries = 0
             
-            # Step 2: Extract features
-            logger.info("Extracting features")
-            features_df = self.trainer.feature_extractor.extract_features(exported_data['data'])
+            for i, export_file_path in enumerate(export_file_paths):
+                logger.info(f"Processing export file {i+1}/{len(export_file_paths)}: {export_file_path}")
+                exported_data = await self._load_exported_data(export_file_path)
+                all_exported_data.append(exported_data)
+                total_log_entries += len(exported_data['data'])
+            
+            # Step 2: Combine data from all files
+            logger.info(f"Combining data from {len(export_file_paths)} files ({total_log_entries} total log entries)")
+            combined_data = self._combine_export_data(all_exported_data)
+            
+            # Step 3: Extract features
+            logger.info("Extracting features from combined data")
+            features_df = self.trainer.feature_extractor.extract_features(combined_data['data'])
             features_df = self.trainer._handle_missing_values(features_df)
             
-            # Step 3: Prepare training data
+            # Step 4: Prepare training data
             logger.info("Preparing training data")
             X = self.trainer.scaler.fit_transform(features_df)
             # For unsupervised learning, we don't have labels
             y = None
             
-            # Step 4: Train model
+            # Step 5: Train model
             logger.info("Training model")
             training_start = datetime.now()
             self.trainer.model = self.trainer._create_model()
             self.trainer.model.fit(X)
             training_duration = (datetime.now() - training_start).total_seconds()
             
-            # Step 5: Evaluate model
+            # Step 6: Evaluate model
             logger.info("Evaluating model")
             evaluation_results = self.evaluator.evaluate_model(self.trainer.model, X, y)
             
-            # Step 6: Check if model meets requirements
+            # Step 7: Check if model meets requirements
             logger.info("Checking model requirements")
             if not self._check_model_requirements(evaluation_results):
                 raise ValueError("Model does not meet performance requirements")
             
-            # Step 7: Save model and metadata
+            # Step 8: Save model and metadata
             logger.info("Saving model and metadata")
             model_path = await self._save_model_with_metadata(
                 self.trainer.model, X, evaluation_results, training_duration, 
-                export_file_path, model_type, features_df.columns.tolist(), training_id
+                export_file_paths, model_type, features_df.columns.tolist(), training_id
             )
             
-            # Step 8: Update model registry
+            # Step 9: Update model registry
             logger.info("Updating model registry")
             await self._update_model_registry(model_path, evaluation_results)
             
-            # Step 9: Generate training report
+            # Step 10: Generate training report
             pipeline_duration = (datetime.now() - pipeline_start).total_seconds()
             report = self._generate_training_report(
-                model_path, evaluation_results, pipeline_duration, features_df.columns.tolist()
+                model_path, evaluation_results, pipeline_duration, features_df.columns.tolist(),
+                export_file_paths, total_log_entries
             )
             
             logger.info("Training pipeline completed successfully")
@@ -114,6 +126,37 @@ class TrainingPipeline:
         except Exception as e:
             logger.error(f"Error loading exported data: {e}")
             raise
+    
+    def _combine_export_data(self, all_exported_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Combine data from multiple export files."""
+        if not all_exported_data:
+            raise ValueError("No export data provided")
+        
+        # Combine all data arrays
+        combined_data = []
+        for exported_data in all_exported_data:
+            if 'data' in exported_data:
+                combined_data.extend(exported_data['data'])
+        
+        # Create combined structure
+        combined_export = {
+            'data': combined_data,
+            'metadata': {
+                'source_files': len(all_exported_data),
+                'total_entries': len(combined_data),
+                'combined_at': datetime.now().isoformat()
+            }
+        }
+        
+        # If any file has additional metadata, preserve it
+        for exported_data in all_exported_data:
+            if 'metadata' in exported_data:
+                for key, value in exported_data['metadata'].items():
+                    if key not in combined_export['metadata']:
+                        combined_export['metadata'][f'source_{key}'] = value
+        
+        logger.info(f"Combined {len(combined_data)} log entries from {len(all_exported_data)} files")
+        return combined_export
     
     def _check_model_requirements(self, evaluation_results: Dict[str, Any]) -> bool:
         """Check if model meets performance requirements."""
@@ -165,7 +208,7 @@ class TrainingPipeline:
                                       X: np.ndarray,
                                       evaluation_results: Dict[str, Any],
                                       training_duration: float,
-                                      export_file_path: str,
+                                      export_file_paths: List[str],
                                       model_type: str,
                                       feature_names: List[str],
                                       training_id: Optional[str] = None) -> Path:
@@ -179,7 +222,7 @@ class TrainingPipeline:
             model_type=model_type,
             training_samples=len(X),
             feature_names=feature_names,
-            export_file=export_file_path,
+            export_file=export_file_paths,
             training_id=training_id,
             model_parameters=self.config.model.dict()
         )
@@ -187,7 +230,10 @@ class TrainingPipeline:
         # Update evaluation results
         metadata.update_evaluation(evaluation_results)
         metadata.update_training_duration(training_duration)
-        metadata.update_export_file_size(Path(export_file_path).stat().st_size)
+        
+        # Calculate total file size from all export files
+        total_file_size = sum(Path(file_path).stat().st_size for file_path in export_file_paths)
+        metadata.update_export_file_size(total_file_size)
         
         # Save model files
         model_dir = Path(self.config.storage.directory) / version
@@ -242,7 +288,9 @@ class TrainingPipeline:
                                 model_path: Path,
                                 evaluation_results: Dict[str, Any],
                                 pipeline_duration: float,
-                                feature_names: List[str]) -> Dict[str, Any]:
+                                feature_names: List[str],
+                                export_file_paths: List[str],
+                                total_log_entries: int) -> Dict[str, Any]:
         """Generate comprehensive training report."""
         evaluation_summary = self.evaluator.get_evaluation_summary()
         
@@ -263,7 +311,9 @@ class TrainingPipeline:
             'evaluation_details': evaluation_results.get('advanced_metrics', {}),
             'threshold_checks': evaluation_results.get('threshold_checks', {}),
             'evaluation_summary': evaluation_summary,
-            'recommendations': evaluation_summary.get('recommendations', [])
+            'recommendations': evaluation_summary.get('recommendations', []),
+            'export_file_paths': export_file_paths,
+            'total_log_entries': total_log_entries
         }
     
     def get_pipeline_status(self) -> Dict[str, Any]:

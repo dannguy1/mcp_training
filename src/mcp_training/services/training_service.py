@@ -39,11 +39,11 @@ class TrainingService:
         self.training_tasks: Dict[str, Dict[str, Any]] = {}
     
     async def start_training(self, 
-                           export_file: str,
+                           export_files: List[str],
                            model_type: str = "isolation_forest",
                            model_name: Optional[str] = None,
                            config_overrides: Optional[Dict[str, Any]] = None) -> str:
-        """Start a training job."""
+        """Start a training job with multiple export files."""
         training_id = str(uuid.uuid4())
         
         # Initialize training task
@@ -55,21 +55,21 @@ class TrainingService:
             'error': None,
             'result': None,
             'start_time': datetime.now().isoformat(),
-            'export_file': export_file,
+            'export_files': export_files,
             'model_type': model_type,
             'model_name': model_name
         }
         
         # Start training in background
         asyncio.create_task(self._run_training_task(
-            training_id, export_file, model_type, model_name, config_overrides
+            training_id, export_files, model_type, model_name, config_overrides
         ))
         
         return training_id
     
     async def _run_training_task(self, 
                                 training_id: str,
-                                export_file: str,
+                                export_files: List[str],
                                 model_type: str,
                                 model_name: Optional[str],
                                 config_overrides: Optional[Dict[str, Any]]):
@@ -77,7 +77,7 @@ class TrainingService:
         try:
             # Step 1: Validate export data
             await self._update_progress(training_id, 5, 'Validating export data')
-            validation_results = await self.training_pipeline.validate_export_for_training(export_file)
+            validation_results = await self.training_pipeline.validate_export_for_training(export_files[0])
             
             if not validation_results['is_valid']:
                 await self._update_progress(training_id, 0, 'Validation failed', 
@@ -87,7 +87,7 @@ class TrainingService:
             # Step 2: Run comprehensive training pipeline
             await self._update_progress(training_id, 10, 'Starting training pipeline')
             training_result = await self.training_pipeline.run_training_pipeline(
-                export_file_path=export_file,
+                export_file_paths=export_files,
                 model_type=model_type,
                 model_name=model_name,
                 training_id=training_id
@@ -259,15 +259,15 @@ class TrainingService:
                                 'model_type': metadata.model_info.model_type,
                                 'training_samples': metadata.training_info.training_samples,
                                 'evaluation_results': metadata.evaluation_info.basic_metrics if hasattr(metadata, 'evaluation_info') else None,
-                                'export_file': metadata.training_info.export_file if hasattr(metadata.training_info, 'export_file') else None,
+                                'export_files': metadata.model_info.export_files if hasattr(metadata.model_info, 'export_files') else None,
                                 'training_duration': metadata.training_info.training_duration if hasattr(metadata.training_info, 'training_duration') else None,
                                 'feature_names': metadata.training_info.feature_names if hasattr(metadata.training_info, 'feature_names') else None,
-                                'export_file_size': metadata.training_info.export_file_size if hasattr(metadata.training_info, 'export_file_size') else None,
+                                'export_files_size': metadata.training_info.export_files_size if hasattr(metadata.training_info, 'export_files_size') else None,
                                 'model_parameters': metadata.training_info.model_parameters if hasattr(metadata.training_info, 'model_parameters') else None
                             },
                             'start_time': metadata.model_info.created_at,
                             'updated_at': metadata.model_info.created_at,
-                            'export_file': metadata.training_info.export_file if hasattr(metadata.training_info, 'export_file') else None,
+                            'export_files': metadata.model_info.export_files if hasattr(metadata.model_info, 'export_files') else None,
                             'model_type': metadata.model_info.model_type,
                             'model_name': None,
                             # Add comprehensive statistics
