@@ -46,8 +46,8 @@ async def lifespan(app: FastAPI):
         )
         
         # Initialize services
-        # Get the project root directory (parent of current working directory)
-        project_root = Path.cwd().parent
+        # Get the project root directory (current working directory)
+        project_root = Path.cwd()
         
         models_dir = str(project_root / config.get("storage", {}).get("models_dir", "models"))
         exports_dir = str(project_root / config.get("storage", {}).get("exports_dir", "exports"))
