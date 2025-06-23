@@ -216,6 +216,17 @@ setup_dev() {
     # Activate virtual environment and install dependencies
     print_info "Installing dependencies..."
     source "$PROJECT_ROOT/venv/bin/activate"
+    
+    # Upgrade pip and setuptools first (fixes Raspberry Pi issues)
+    print_info "Upgrading pip and setuptools..."
+    pip install --upgrade pip setuptools wheel
+    
+    # Install numpy first (it's a dependency for other packages)
+    print_info "Installing numpy first..."
+    pip install numpy==1.24.3
+    
+    # Install the rest of the requirements
+    print_info "Installing remaining dependencies..."
     pip install -r "$PROJECT_ROOT/requirements.txt"
     
     # Create necessary directories
