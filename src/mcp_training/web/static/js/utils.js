@@ -3,7 +3,7 @@
  */
 
 // API Base URL - Point to backend server
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'http://localhost:8000';
 
 /**
  * Make API calls with error handling

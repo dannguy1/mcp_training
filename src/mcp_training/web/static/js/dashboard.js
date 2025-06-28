@@ -231,9 +231,9 @@ class DashboardManager {
     async updateDashboard() {
         try {
             const [status, trainingJobs, models] = await Promise.all([
-                utils.apiCall('/health/status'),
-                utils.apiCall('/training/jobs'),
-                utils.apiCall('/models')
+                utils.apiCall('/api/health/status'),
+                utils.apiCall('/api/training/jobs'),
+                utils.apiCall('/api/models')
             ]);
             
             this.updateStatusCards(status);
@@ -466,7 +466,7 @@ class DashboardManager {
     async updateTrainingChartData(range) {
         try {
             const params = new URLSearchParams({ range });
-            const data = await utils.apiCall(`/training/chart-data?${params}`);
+            const data = await utils.apiCall(`/api/training/chart-data?${params}`);
             
             if (this.charts.training) {
                 this.charts.training.data.labels = data.labels;
@@ -552,7 +552,7 @@ class DashboardManager {
             const formData = new FormData();
             formData.append('file', file);
             
-            const response = await utils.apiCall('/training/exports/upload', {
+            const response = await utils.apiCall('/api/training/exports/upload', {
                 method: 'POST',
                 body: formData,
                 headers: {} // Let browser set content-type for FormData

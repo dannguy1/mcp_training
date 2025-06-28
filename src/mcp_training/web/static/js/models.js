@@ -90,7 +90,7 @@ class ModelsManager {
     async loadModels() {
         try {
             utils.showLoading();
-            const models = await utils.apiCall('/models');
+            const models = await utils.apiCall('/api/models');
             this.models = models;
             this.filteredModels = [...models];
             this.updateModelsTable();
@@ -300,7 +300,7 @@ class ModelsManager {
             formData.append('description', modelDescription || '');
             formData.append('auto_deploy', autoDeploy || false);
             
-            const response = await utils.apiCall('/models', {
+            const response = await utils.apiCall('/api/models', {
                 method: 'POST',
                 body: formData,
                 headers: {} // Let browser set content-type for FormData
@@ -325,7 +325,7 @@ class ModelsManager {
         try {
             utils.showLoading();
             
-            await utils.apiCall(`/models/${modelId}/deploy`, {
+            await utils.apiCall(`/api/models/${modelId}/deploy`, {
                 method: 'POST',
                 body: JSON.stringify({ deployed_by: 'user' }),
                 headers: { 'Content-Type': 'application/json' }
@@ -342,7 +342,7 @@ class ModelsManager {
     
     async downloadModel(modelId) {
         try {
-            const response = await fetch(`${API_BASE}/models/${modelId}/download`);
+            const response = await fetch(`${API_BASE}/api/models/${modelId}/download`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -359,7 +359,7 @@ class ModelsManager {
         try {
             utils.showLoading();
             
-            const response = await fetch(`${API_BASE}/models/${modelId}/deployment-package`);
+            const response = await fetch(`${API_BASE}/api/models/${modelId}/deployment-package`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -382,7 +382,7 @@ class ModelsManager {
         }
         
         try {
-            await utils.apiCall(`/models/${modelId}`, { method: 'DELETE' });
+            await utils.apiCall(`/api/models/${modelId}`, { method: 'DELETE' });
             utils.showSuccess('Model deleted successfully');
             this.loadModels();
         } catch (error) {
@@ -392,7 +392,7 @@ class ModelsManager {
     
     async viewModelDetails(modelId) {
         try {
-            const model = await utils.apiCall(`/models/${modelId}`);
+            const model = await utils.apiCall(`/api/models/${modelId}`);
             this.showModelDetailsModal(model);
         } catch (error) {
             utils.showError('Failed to load model details', error);
@@ -512,7 +512,7 @@ class ModelsManager {
         
         try {
             const promises = Array.from(this.selectedModels).map(modelId =>
-                utils.apiCall(`/models/${modelId}`, { method: 'DELETE' })
+                utils.apiCall(`/api/models/${modelId}`, { method: 'DELETE' })
             );
             
             await Promise.all(promises);

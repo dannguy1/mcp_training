@@ -140,7 +140,7 @@ class TrainingManager {
     async loadTrainingJobs() {
         try {
             utils.showLoading();
-            const jobs = await utils.apiCall('/training/jobs');
+            const jobs = await utils.apiCall('/api/training/jobs');
             this.jobs = jobs;
             this.filteredJobs = [...jobs];
             this.updateTrainingTable();
@@ -331,7 +331,7 @@ class TrainingManager {
                 requestData.description = description;
             }
             
-            const response = await utils.apiCall('/training/jobs', {
+            const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
                 body: JSON.stringify(requestData)
             });
@@ -356,7 +356,7 @@ class TrainingManager {
     
     async cancelJob(jobId) {
         try {
-            await utils.apiCall(`/training/jobs/${jobId}/cancel`, { method: 'POST' });
+            await utils.apiCall(`/api/training/jobs/${jobId}/cancel`, { method: 'POST' });
             utils.showSuccess('Training job cancelled successfully');
             this.loadTrainingJobs();
         } catch (error) {
@@ -374,7 +374,7 @@ class TrainingManager {
         if (!this.currentJobId) return;
         
         try {
-            await utils.apiCall(`/training/jobs/${this.currentJobId}`, { method: 'DELETE' });
+            await utils.apiCall(`/api/training/jobs/${this.currentJobId}`, { method: 'DELETE' });
             utils.showSuccess('Training job deleted successfully');
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal'));
@@ -640,7 +640,7 @@ class TrainingManager {
     
     async downloadResults(jobId) {
         try {
-            const response = await fetch(`${API_BASE}/training/jobs/${jobId}/results`);
+            const response = await fetch(`${API_BASE}/api/training/jobs/${jobId}/results`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -737,7 +737,7 @@ class TrainingManager {
     async loadExportFiles() {
         console.log('TrainingManager.loadExportFiles called');
         try {
-            const exports = await utils.apiCall('/training/exports');
+            const exports = await utils.apiCall('/api/training/exports');
             console.log('Export files loaded:', exports);
             const select = document.getElementById('exportFiles');
             if (!select) {
@@ -928,7 +928,7 @@ class TrainingManager {
                 formData.append('file', file);
                 
                 console.log('Making API call to upload file...');
-                const response = await utils.apiCall('/training/exports/upload', {
+                const response = await utils.apiCall('/api/training/exports/upload', {
                     method: 'POST',
                     body: formData,
                     headers: {} // Let browser set content-type for FormData

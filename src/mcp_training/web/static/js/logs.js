@@ -126,7 +126,7 @@ class LogsManager {
             if (level) params.append('level', level);
             if (service) params.append('service', service);
             
-            const response = await utils.apiCall(`/logs/?${params}`);
+            const response = await utils.apiCall(`/api/logs/?${params}`);
             
             // Extract logs array from response
             this.logs = response.logs || [];
@@ -231,7 +231,7 @@ class LogsManager {
     
     async viewLogDetails(logId) {
         try {
-            const log = await utils.apiCall(`/logs/${logId}`);
+            const log = await utils.apiCall(`/api/logs/${logId}`);
             this.showLogDetailsModal(log);
         } catch (error) {
             utils.showError('Failed to load log details', error);
@@ -336,7 +336,7 @@ class LogsManager {
             if (startTime) params.append('start_time', startTime);
             if (endTime) params.append('end_time', endTime);
             
-            const response = await fetch(`${API_BASE}/logs/export?${params}`);
+            const response = await fetch(`${API_BASE}/api/logs/export?${params}`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -359,7 +359,7 @@ class LogsManager {
         }
         
         try {
-            await utils.apiCall('/logs/', { method: 'DELETE' });
+            await utils.apiCall('/api/logs/', { method: 'DELETE' });
             utils.showSuccess('Logs cleared successfully');
             this.loadLogs();
         } catch (error) {

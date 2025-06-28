@@ -106,9 +106,9 @@ class MCPTrainingApp {
     async loadDashboardData() {
         try {
             const [status, trainingJobs, models] = await Promise.all([
-                utils.apiCall('/health/status'),
-                utils.apiCall('/training/jobs'),
-                utils.apiCall('/models')
+                utils.apiCall('/api/health/status'),
+                utils.apiCall('/api/training/jobs'),
+                utils.apiCall('/api/models')
             ]);
             
             this.updateDashboard(status, trainingJobs, models);
@@ -119,7 +119,7 @@ class MCPTrainingApp {
     
     async loadTrainingData() {
         try {
-            const trainingJobs = await utils.apiCall('/training/jobs');
+            const trainingJobs = await utils.apiCall('/api/training/jobs');
             this.updateTrainingTable(trainingJobs);
         } catch (error) {
             utils.showError('Failed to load training data', error);
@@ -128,7 +128,7 @@ class MCPTrainingApp {
     
     async loadModelsData() {
         try {
-            const models = await utils.apiCall('/models');
+            const models = await utils.apiCall('/api/models');
             this.updateModelsTable(models);
         } catch (error) {
             utils.showError('Failed to load models data', error);
@@ -137,7 +137,7 @@ class MCPTrainingApp {
     
     async loadLogsData() {
         try {
-            const response = await utils.apiCall('/logs/');
+            const response = await utils.apiCall('/api/logs/');
             // Extract logs array from response
             const logs = response.logs || [];
             this.updateLogsTable(logs);
@@ -460,7 +460,7 @@ class MCPTrainingApp {
             formData.append('export_file', fileInput.files[0]);
             formData.append('config', configSelect.value);
             
-            const response = await utils.apiCall('/training/jobs', {
+            const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
                 body: formData,
                 headers: {} // Let browser set content-type for FormData
@@ -487,7 +487,7 @@ class MCPTrainingApp {
         }
         
         try {
-            await utils.apiCall(`/training/jobs/${jobId}/cancel`, { method: 'POST' });
+            await utils.apiCall(`/api/training/jobs/${jobId}/cancel`, { method: 'POST' });
             utils.showSuccess('Training job cancelled successfully');
             this.loadPageData();
         } catch (error) {
@@ -501,7 +501,7 @@ class MCPTrainingApp {
         }
         
         try {
-            await utils.apiCall(`/training/jobs/${jobId}`, { method: 'DELETE' });
+            await utils.apiCall(`/api/training/jobs/${jobId}`, { method: 'DELETE' });
             utils.showSuccess('Training job deleted successfully');
             this.loadPageData();
         } catch (error) {
@@ -511,7 +511,7 @@ class MCPTrainingApp {
     
     async deployModel(modelId) {
         try {
-            await utils.apiCall(`/models/${modelId}/deploy`, { method: 'POST' });
+            await utils.apiCall(`/api/models/${modelId}/deploy`, { method: 'POST' });
             utils.showSuccess('Model deployed successfully');
             this.loadPageData();
         } catch (error) {
@@ -521,7 +521,7 @@ class MCPTrainingApp {
     
     async downloadModel(modelId) {
         try {
-            const response = await fetch(`${API_BASE}/models/${modelId}/download`);
+            const response = await fetch(`${API_BASE}/api/models/${modelId}/download`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -540,7 +540,7 @@ class MCPTrainingApp {
         }
         
         try {
-            await utils.apiCall(`/models/${modelId}`, { method: 'DELETE' });
+            await utils.apiCall(`/api/models/${modelId}`, { method: 'DELETE' });
             utils.showSuccess('Model deleted successfully');
             this.loadPageData();
         } catch (error) {
