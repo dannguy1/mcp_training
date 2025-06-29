@@ -33,7 +33,16 @@ class TrainingService:
         self.feature_extractor = WiFiFeatureExtractor()
         self.model_trainer = ModelTrainer()
         self.export_validator = ExportValidator()
-        self.model_registry = ModelRegistry(self.config.storage.directory) if self.config else None
+        
+        # Use absolute path for model registry to prevent duplicate directories
+        if self.config:
+            # Get project root and create absolute path for models directory
+            project_root = Path(__file__).parent.parent.parent.parent
+            models_dir = project_root / self.config.storage.directory
+            self.model_registry = ModelRegistry(str(models_dir))
+        else:
+            self.model_registry = None
+            
         self.model_evaluator = ModelEvaluator(self.config)
         self.training_pipeline = TrainingPipeline(self.config)
         self.training_tasks: Dict[str, Dict[str, Any]] = {}
@@ -44,11 +53,20 @@ class TrainingService:
                            model_name: Optional[str] = None,
                            config_overrides: Optional[Dict[str, Any]] = None) -> str:
         """Start a training job with multiple export files."""
+        # Check for duplicate requests - if same export files are already being processed
+        for existing_id, existing_task in self.training_tasks.items():
+            if (existing_task.get('status') in ['initializing', 'running'] and 
+                existing_task.get('export_files') == export_files):
+                logger.warning(f"Duplicate training request detected for export files: {export_files}")
+                logger.info(f"Returning existing training ID: {existing_id}")
+                return existing_id
+        
         training_id = str(uuid.uuid4())
         
         # Initialize training task
         self.training_tasks[training_id] = {
             'id': training_id,
+            'training_id': training_id,  # Ensure training_id is explicitly set
             'status': 'initializing',
             'progress': 0,
             'step': 'Validating export data',
@@ -283,7 +301,9 @@ class TrainingService:
     def _get_evaluation_summary_from_registry(self, version: str) -> Dict[str, Any]:
         """Get evaluation summary from model registry."""
         try:
-            registry_file = Path(self.config.storage.directory) / 'model_registry.json'
+            # Use absolute path for registry file
+            project_root = Path(__file__).parent.parent.parent.parent
+            registry_file = project_root / self.config.storage.directory / 'model_registry.json'
             if registry_file.exists():
                 with open(registry_file, 'r') as f:
                     registry = json.load(f)
@@ -310,6 +330,7 @@ class TrainingService:
                     if model_info_tid == training_id or training_info_tid == training_id:
                         return {
                             'id': training_id,
+                            'training_id': training_id,  # Ensure training_id is explicitly set
                             'status': 'completed',
                             'progress': 100,
                             'step': 'Training completed',
@@ -353,6 +374,11 @@ class TrainingService:
         """List all training tasks (including completed ones from registry)."""
         # Start with in-memory tasks
         all_tasks = self.training_tasks.copy()
+        
+        # Ensure all in-memory tasks have training_id set
+        for task_id, task in all_tasks.items():
+            if 'training_id' not in task:
+                task['training_id'] = task_id
         
         # Add completed jobs from registry
         try:

@@ -1,440 +1,387 @@
 """
-End-to-end training pipeline for MCP Training Service.
+Training pipeline for MCP Training Service.
 """
 
-import asyncio
-import logging
-import json
-import joblib
+from typing import Dict, Any, Optional, List, Callable
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 from pathlib import Path
+import json
+import logging
+from datetime import datetime
 
-from ..core.model_trainer import ModelTrainer
-from .evaluation import ModelEvaluator
-from .metadata import ModelMetadata
-from .config import ModelConfig
-from .registry import ModelRegistry
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
 logger = logging.getLogger(__name__)
 
 
 class TrainingPipeline:
-    """End-to-end training pipeline."""
+    """Pipeline for training unsupervised anomaly detection models."""
     
-    def __init__(self, config: ModelConfig):
-        """Initialize the training pipeline."""
+    def __init__(self, config=None):
+        """Initialize training pipeline."""
         self.config = config
-        self.trainer = ModelTrainer()
-        self.evaluator = ModelEvaluator(config)
-        self.metadata_manager = ModelMetadata
-        self.registry = ModelRegistry(config.storage.directory)
+        self.scaler = None
+        self.model = None
     
-    async def run_training_pipeline(self, 
-                                  export_file_paths: List[str],
-                                  model_type: str = "isolation_forest",
-                                  model_name: Optional[str] = None,
-                                  training_id: Optional[str] = None,
-                                  progress_callback: Optional[callable] = None) -> Dict[str, Any]:
-        """Run complete training pipeline with multiple export files."""
-        pipeline_start = datetime.now()
+    async def validate_export_for_training(self, export_file: str) -> Dict[str, Any]:
+        """Validate export file for training suitability.
         
+        Args:
+            export_file: Path to export file
+            
+        Returns:
+            Validation results
+        """
         try:
-            logger.info(f"Starting training pipeline with {len(export_file_paths)} export files")
+            with open(export_file, 'r') as f:
+                data = json.load(f)
             
-            # Step 1: Load and validate export data from all files (5-15%)
-            if progress_callback:
-                await progress_callback(5, 'Loading and validating export data')
-            logger.info("Loading and validating export data from all files")
-            all_exported_data = []
-            total_log_entries = 0
+            # Check basic structure
+            if 'data' not in data:
+                return {
+                    'is_valid': False,
+                    'errors': ['Export file must contain "data" section']
+                }
             
-            for i, export_file_path in enumerate(export_file_paths):
-                logger.info(f"Processing export file {i+1}/{len(export_file_paths)}: {export_file_path}")
-                exported_data = await self._load_exported_data(export_file_path)
-                all_exported_data.append(exported_data)
-                total_log_entries += len(exported_data['data'])
+            records = data['data']
+            if not records:
+                return {
+                    'is_valid': False,
+                    'errors': ['Export file contains no data records']
+                }
+            
+            # Check minimum record count
+            if len(records) < 10:
+                return {
+                    'is_valid': False,
+                    'errors': [f'Insufficient data: {len(records)} records (minimum 10 required)']
+                }
+            
+            # Check data quality
+            errors = []
+            for i, record in enumerate(records[:100]):  # Check first 100 records
+                if not isinstance(record, dict):
+                    errors.append(f'Record {i} is not a dictionary')
+                    continue
                 
-                # Progress update for each file (5-15%)
-                if progress_callback:
-                    file_progress = 5 + (i + 1) * 10 / len(export_file_paths)
-                    await progress_callback(file_progress, f'Processed {i+1}/{len(export_file_paths)} export files')
+                # Check for required fields (basic validation)
+                if 'timestamp' not in record:
+                    errors.append(f'Record {i} missing timestamp')
+                
+                if len(errors) >= 10:  # Limit error reporting
+                    errors.append('... (additional errors truncated)')
+                    break
             
-            # Step 2: Combine data from all files (15-20%)
-            if progress_callback:
-                await progress_callback(15, 'Combining export data')
-            logger.info(f"Combining data from {len(export_file_paths)} files ({total_log_entries} total log entries)")
-            combined_data = self._combine_export_data(all_exported_data)
+            return {
+                'is_valid': len(errors) == 0,
+                'errors': errors,
+                'record_count': len(records),
+                'sample_fields': list(records[0].keys()) if records else []
+            }
             
-            # Step 3: Extract features (20-35%)
-            if progress_callback:
-                await progress_callback(20, 'Extracting features from data')
-            logger.info("Extracting features from combined data")
-            features_df = self.trainer.feature_extractor.extract_features(combined_data['data'])
-            features_df = self.trainer._handle_missing_values(features_df)
+        except Exception as e:
+            return {
+                'is_valid': False,
+                'errors': [f'Error reading export file: {str(e)}']
+            }
+    
+    async def run_training_pipeline(
+        self,
+        export_file_paths: List[str],
+        model_type: str = "isolation_forest",
+        model_name: Optional[str] = None,
+        training_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, str], None]] = None
+    ) -> Dict[str, Any]:
+        """Run the complete training pipeline.
+        
+        Args:
+            export_file_paths: List of export file paths
+            model_type: Type of model to train
+            model_name: Optional model name
+            training_id: Training job ID
+            progress_callback: Optional progress callback function
             
+        Returns:
+            Training results
+        """
+        try:
             if progress_callback:
-                await progress_callback(35, 'Features extracted successfully')
+                await progress_callback(15, 'Loading and preprocessing data')
             
-            # Step 4: Prepare training data (35-45%)
-            if progress_callback:
-                await progress_callback(35, 'Preparing training data')
-            logger.info("Preparing training data")
-            X = self.trainer.scaler.fit_transform(features_df)
-            # For unsupervised learning, we don't have labels
-            y = None
-            
-            if progress_callback:
-                await progress_callback(45, 'Training data prepared')
-            
-            # Step 5: Train model (45-75%)
-            if progress_callback:
-                await progress_callback(45, 'Training model')
-            logger.info("Training model")
-            training_start = datetime.now()
-            self.trainer.model = self.trainer._create_model()
-            self.trainer.model.fit(X)
-            training_duration = (datetime.now() - training_start).total_seconds()
-            
-            if progress_callback:
-                await progress_callback(75, 'Model training completed')
-            
-            # Step 6: Evaluate model (75-85%)
-            if progress_callback:
-                await progress_callback(75, 'Evaluating model performance')
-            logger.info("Evaluating model")
-            evaluation_results = self.evaluator.evaluate_model(self.trainer.model, X, y)
+            # Step 1: Load and preprocess data
+            features_data = await self._load_and_preprocess_data(export_file_paths[0])
             
             if progress_callback:
-                await progress_callback(85, 'Model evaluation completed')
+                await progress_callback(30, 'Extracting features')
             
-            # Step 7: Check if model meets requirements (85-90%)
-            if progress_callback:
-                await progress_callback(85, 'Checking model requirements')
-            logger.info("Checking model requirements")
-            if not self._check_model_requirements(evaluation_results):
-                raise ValueError("Model does not meet performance requirements")
+            # Step 2: Extract features
+            X, feature_names = self._extract_features(features_data)
             
             if progress_callback:
-                await progress_callback(90, 'Model requirements validated')
+                await progress_callback(50, 'Training model')
             
-            # Step 8: Save model and metadata (90-95%)
+            # Step 3: Train model
+            model = await self._train_model(X, model_type)
+            
+            if progress_callback:
+                await progress_callback(70, 'Evaluating model')
+            
+            # Step 4: Evaluate model
+            from .evaluation import ModelEvaluator
+            evaluator = ModelEvaluator(self.config)
+            evaluation_results = evaluator.evaluate_model(model, X, feature_names)
+            
             if progress_callback:
                 await progress_callback(90, 'Saving model and metadata')
-            logger.info("Saving model and metadata")
+            
+            # Step 5: Save model and metadata
             model_path = await self._save_model_with_metadata(
-                self.trainer.model, X, evaluation_results, training_duration, 
-                export_file_paths, model_type, features_df.columns.tolist(), training_id
+                model, features_data, evaluation_results, export_file_paths[0], 
+                training_id, model_type
             )
             
             if progress_callback:
-                await progress_callback(95, 'Model saved successfully')
+                await progress_callback(100, 'Training completed')
             
-            # Step 9: Update model registry (95-98%)
-            if progress_callback:
-                await progress_callback(95, 'Updating model registry')
-            logger.info("Updating model registry")
-            await self._update_model_registry(model_path, evaluation_results)
-            
-            if progress_callback:
-                await progress_callback(98, 'Registry updated')
-            
-            # Step 10: Generate training report (98-100%)
-            if progress_callback:
-                await progress_callback(98, 'Generating training report')
-            pipeline_duration = (datetime.now() - pipeline_start).total_seconds()
-            report = self._generate_training_report(
-                model_path, evaluation_results, pipeline_duration, features_df.columns.tolist(),
-                export_file_paths, total_log_entries
-            )
-            
-            if progress_callback:
-                await progress_callback(100, 'Training pipeline completed successfully')
-            
-            logger.info("Training pipeline completed successfully")
-            return report
+            return {
+                'model_version': model_path.name,
+                'model_type': model_type,
+                'training_samples': len(features_data),
+                'evaluation_results': evaluation_results,
+                'export_files': export_file_paths,
+                'training_duration': 0.0,  # Will be calculated by training service
+                'feature_names': feature_names,
+                'export_files_size': Path(export_file_paths[0]).stat().st_size,
+                'model_parameters': self._get_model_parameters(model),
+                'model_path': str(model_path)
+            }
             
         except Exception as e:
             logger.error(f"Training pipeline failed: {e}")
-            if progress_callback:
-                await progress_callback(0, f'Training failed: {str(e)}')
             raise
     
-    async def _load_exported_data(self, export_file_path: str) -> Dict[str, Any]:
-        """Load data from exported JSON file."""
+    async def _load_and_preprocess_data(self, export_file: str) -> List[Dict[str, Any]]:
+        """Load and preprocess export data."""
         try:
-            with open(export_file_path, 'r') as f:
+            with open(export_file, 'r') as f:
                 data = json.load(f)
             
-            # Validate export data structure
-            if 'data' not in data:
-                raise ValueError("Export file must contain 'data' section")
+            records = data.get('data', [])
+            logger.info(f"Loaded {len(records)} records from export file")
             
-            logger.info(f"Loaded {len(data['data'])} log entries from export file")
-            return data
+            # Basic preprocessing: filter out invalid records
+            valid_records = []
+            for record in records:
+                if isinstance(record, dict) and 'timestamp' in record:
+                    valid_records.append(record)
+            
+            logger.info(f"Preprocessed {len(valid_records)} valid records")
+            return valid_records
             
         except Exception as e:
-            logger.error(f"Error loading exported data: {e}")
+            logger.error(f"Error loading export data: {e}")
             raise
     
-    def _combine_export_data(self, all_exported_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Combine data from multiple export files."""
-        if not all_exported_data:
-            raise ValueError("No export data provided")
-        
-        # Combine all data arrays
-        combined_data = []
-        for exported_data in all_exported_data:
-            if 'data' in exported_data:
-                combined_data.extend(exported_data['data'])
-        
-        # Create combined structure
-        combined_export = {
-            'data': combined_data,
-            'metadata': {
-                'source_files': len(all_exported_data),
-                'total_entries': len(combined_data),
-                'combined_at': datetime.now().isoformat()
-            }
-        }
-        
-        # If any file has additional metadata, preserve it
-        for exported_data in all_exported_data:
-            if 'metadata' in exported_data:
-                for key, value in exported_data['metadata'].items():
-                    if key not in combined_export['metadata']:
-                        combined_export['metadata'][f'source_{key}'] = value
-        
-        logger.info(f"Combined {len(combined_data)} log entries from {len(all_exported_data)} files")
-        return combined_export
-    
-    def _check_model_requirements(self, evaluation_results: Dict[str, Any]) -> bool:
-        """Check if model meets performance requirements."""
-        threshold_checks = evaluation_results.get('threshold_checks', {})
-        evaluation_mode = evaluation_results.get('evaluation_mode', 'supervised')
-        
-        if evaluation_mode == "unsupervised":
-            # For unsupervised learning, check score-based metrics
-            # We need at least some checks to pass
-            passed_checks = sum(threshold_checks.values())
-            total_checks = len(threshold_checks)
+    def _extract_features(self, records: List[Dict[str, Any]]) -> tuple:
+        """Extract features from records."""
+        try:
+            # Convert to DataFrame for easier feature extraction
+            df = pd.DataFrame(records)
             
-            if total_checks == 0:
-                logger.warning("No threshold checks available for unsupervised evaluation")
-                return False
+            # Extract basic features
+            features = {}
             
-            pass_rate = passed_checks / total_checks
-            logger.info(f"Unsupervised evaluation pass rate: {pass_rate:.2f} ({passed_checks}/{total_checks})")
+            # Time-based features
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                features['hour_of_day'] = df['timestamp'].dt.hour
+                features['day_of_week'] = df['timestamp'].dt.dayofweek
+                features['minute_of_hour'] = df['timestamp'].dt.minute
+                features['time_since_midnight'] = df['timestamp'].dt.hour * 60 + df['timestamp'].dt.minute
             
-            # Require at least 50% of checks to pass for unsupervised learning (was 60%)
-            if pass_rate < 0.5:
-                logger.warning(f"Unsupervised evaluation pass rate too low: {pass_rate:.2f}")
-                return False
+            # Boolean features
+            features['is_weekend'] = (df['timestamp'].dt.dayofweek >= 5).astype(int)
+            features['is_business_hours'] = ((df['timestamp'].dt.hour >= 9) & (df['timestamp'].dt.hour <= 17)).astype(int)
             
-            return True
-        else:
-            # For supervised learning, check classification metrics
-            # All required metrics must pass thresholds
-            required_metrics = ['accuracy', 'precision', 'recall', 'f1_score']
-            for metric in required_metrics:
-                if metric in threshold_checks and not threshold_checks[metric]:
-                    logger.warning(f"Model failed {metric} threshold check")
-                    return False
+            # Event type features
+            features['is_connection_event'] = df['message'].str.contains('connection|connect|join', case=False, na=False).astype(int)
+            features['is_auth_event'] = df['message'].str.contains('auth|authentication|login', case=False, na=False).astype(int)
+            features['is_error_event'] = df['message'].str.contains('error|fail|denied', case=False, na=False).astype(int)
             
-            # Check overall performance - only if ROC AUC is available
-            basic_metrics = evaluation_results.get('basic_metrics', {})
-            roc_auc = basic_metrics.get('roc_auc')
-            if roc_auc is not None:
-                if roc_auc < 0.5:  # Minimum ROC AUC
-                    logger.warning("Model ROC AUC below minimum threshold")
-                    return False
+            # Network features (if available)
+            if 'mac_address' in df.columns:
+                features['mac_count'] = df.groupby('timestamp').size().reindex(df['timestamp']).fillna(0)
             else:
-                logger.info("ROC AUC not available (single-class data), skipping ROC AUC check")
+                features['mac_count'] = 0
             
-            return True
-    
-    async def _save_model_with_metadata(self, 
-                                      model: Any, 
-                                      X: np.ndarray,
-                                      evaluation_results: Dict[str, Any],
-                                      training_duration: float,
-                                      export_file_paths: List[str],
-                                      model_type: str,
-                                      feature_names: List[str],
-                                      training_id: Optional[str] = None) -> Path:
-        """Save model with comprehensive metadata."""
-        # Generate version
-        version = datetime.now().strftime(self.config.storage.version_format)
-        
-        # Create model metadata
-        metadata = self.metadata_manager.create(
-            version=version,
-            model_type=model_type,
-            training_samples=len(X),
-            feature_names=feature_names,
-            export_files=export_file_paths,
-            training_id=training_id,
-            model_parameters=self.config.model.dict()
-        )
-        
-        # Update evaluation results
-        metadata.update_evaluation(evaluation_results)
-        metadata.update_training_duration(training_duration)
-        
-        # Calculate total file size from all export files
-        total_file_size = sum(Path(file_path).stat().st_size for file_path in export_file_paths)
-        metadata.update_export_file_size(total_file_size)
-        
-        # Save model files
-        model_dir = Path(self.config.storage.directory) / version
-        model_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save model
-        model_file = model_dir / "model.joblib"
-        joblib.dump(model, model_file)
-        
-        # Save scaler
-        scaler_file = model_dir / "scaler.joblib"
-        joblib.dump(self.trainer.scaler, scaler_file)
-        
-        # Save metadata
-        metadata.save(model_dir)
-        
-        return model_dir
-    
-    async def _update_model_registry(self, model_path: Path, 
-                                   evaluation_results: Dict[str, Any]) -> None:
-        """Update model registry with new model."""
-        try:
-            # Load existing registry
-            registry_file = Path(self.config.storage.directory) / 'model_registry.json'
+            if 'ip_address' in df.columns:
+                features['ip_count'] = df.groupby('timestamp').size().reindex(df['timestamp']).fillna(0)
+            else:
+                features['ip_count'] = 0
             
-            registry = {}
-            if registry_file.exists():
-                with open(registry_file, 'r') as f:
-                    registry = json.load(f)
+            # Text features
+            features['message_length'] = df['message'].str.len().fillna(0)
+            features['word_count'] = df['message'].str.split().str.len().fillna(0)
+            features['special_char_count'] = df['message'].str.count(r'[^a-zA-Z0-9\s]').fillna(0)
+            features['uppercase_ratio'] = (df['message'].str.count(r'[A-Z]') / df['message'].str.len()).fillna(0)
+            features['number_count'] = df['message'].str.count(r'\d').fillna(0)
+            features['unique_chars'] = df['message'].apply(lambda x: len(set(str(x))) if pd.notna(x) else 0)
             
-            # Add new model to registry
-            model_version = model_path.name
-            registry[model_version] = {
-                'path': str(model_path),
-                'created_at': datetime.now().isoformat(),
-                'metrics': evaluation_results.get('basic_metrics', {}),
-                'status': 'available',
-                'evaluation_summary': self.evaluator.get_evaluation_summary()
-            }
+            # Process features (if available)
+            if 'process' in df.columns:
+                features['process_rank'] = df['process'].rank(method='dense').fillna(0)
+                features['process_frequency'] = df.groupby('process').size().reindex(df['process']).fillna(0)
+            else:
+                features['process_rank'] = 0
+                features['process_frequency'] = 0
             
-            # Save updated registry
-            with open(registry_file, 'w') as f:
-                json.dump(registry, f, indent=2)
-                
-            logger.info(f"Model registry updated with version {model_version}")
+            # Log level features
+            if 'level' in df.columns:
+                level_mapping = {'DEBUG': 0, 'INFO': 1, 'WARNING': 2, 'ERROR': 3, 'CRITICAL': 4}
+                features['log_level_numeric'] = df['level'].map(level_mapping).fillna(1)
+            else:
+                features['log_level_numeric'] = 1
+            
+            # Window-based features (simplified)
+            features['window_5min_connection_count'] = 0  # Placeholder
+            features['window_5min_unique_macs'] = 0
+            features['window_5min_error_count'] = 0
+            features['window_5min_process_diversity'] = 0
+            features['window_15min_connection_count'] = 0
+            features['window_15min_unique_macs'] = 0
+            features['window_15min_error_count'] = 0
+            features['window_15min_process_diversity'] = 0
+            features['window_1hour_connection_count'] = 0
+            features['window_1hour_unique_macs'] = 0
+            features['window_1hour_error_count'] = 0
+            features['window_1hour_process_diversity'] = 0
+            
+            # Convert to feature matrix
+            feature_df = pd.DataFrame(features)
+            X = feature_df.values
+            
+            # Handle missing values
+            X = np.nan_to_num(X, nan=0.0)
+            
+            # Scale features
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
+            
+            feature_names = list(features.keys())
+            logger.info(f"Extracted {len(feature_names)} features from {len(records)} records")
+            
+            return X_scaled, feature_names
             
         except Exception as e:
-            logger.error(f"Error updating model registry: {e}")
-            # Don't fail the pipeline for registry update errors
+            logger.error(f"Error extracting features: {e}")
+            raise
     
-    def _generate_training_report(self, 
-                                model_path: Path,
-                                evaluation_results: Dict[str, Any],
-                                pipeline_duration: float,
-                                feature_names: List[str],
-                                export_file_paths: List[str],
-                                total_log_entries: int) -> Dict[str, Any]:
-        """Generate comprehensive training report."""
-        evaluation_summary = self.evaluator.get_evaluation_summary()
-        
-        return {
-            'pipeline_info': {
-                'status': 'completed',
-                'duration': pipeline_duration,
-                'model_path': str(model_path),
-                'created_at': datetime.now().isoformat()
-            },
-            'model_info': {
-                'model_type': type(self.trainer.model).__name__,
-                'feature_count': len(feature_names),
-                'feature_names': feature_names,
-                'training_samples': evaluation_results.get('basic_metrics', {}).get('training_samples', 0)
-            },
-            'model_performance': evaluation_results.get('basic_metrics', {}),
-            'evaluation_details': evaluation_results.get('advanced_metrics', {}),
-            'threshold_checks': evaluation_results.get('threshold_checks', {}),
-            'evaluation_summary': evaluation_summary,
-            'recommendations': evaluation_summary.get('recommendations', []),
-            'export_file_paths': export_file_paths,
-            'total_log_entries': total_log_entries
-        }
-    
-    def get_pipeline_status(self) -> Dict[str, Any]:
-        """Get current pipeline status."""
-        return {
-            'config': {
-                'model_type': self.config.model.dict(),
-                'evaluation_thresholds': self.config.evaluation.thresholds,
-                'storage_directory': self.config.storage.directory
-            },
-            'registry_stats': self.registry.get_model_stats() if self.registry else {}
-        }
-    
-    async def validate_export_for_training(self, export_file_path: str) -> Dict[str, Any]:
-        """Validate that export file is suitable for training."""
+    async def _train_model(self, X: np.ndarray, model_type: str):
+        """Train the specified model type."""
         try:
-            # Load export data
-            exported_data = await self._load_exported_data(export_file_path)
+            if model_type == "isolation_forest":
+                model = IsolationForest(
+                    n_estimators=100,
+                    max_samples='auto',
+                    contamination=0.1,
+                    random_state=42,
+                    bootstrap=True,
+                    max_features=1.0
+                )
+            else:
+                # Default to Isolation Forest
+                model = IsolationForest(
+                    n_estimators=100,
+                    max_samples='auto',
+                    contamination=0.1,
+                    random_state=42
+                )
             
-            validation_results = {
-                'is_valid': True,
-                'errors': [],
-                'warnings': [],
-                'stats': {}
-            }
+            # Train the model
+            model.fit(X)
+            self.model = model
             
-            # Check data structure
-            if 'data' not in exported_data:
-                validation_results['is_valid'] = False
-                validation_results['errors'].append("Missing 'data' section in export file")
-            
-            # Check data quality
-            if 'data' in exported_data:
-                data = exported_data['data']
-                validation_results['stats']['total_records'] = len(data)
-                
-                # Check for WiFi-related logs
-                wifi_logs = [log for log in data if log.get('process_name') in ['hostapd', 'wpa_supplicant']]
-                validation_results['stats']['wifi_logs'] = len(wifi_logs)
-                validation_results['stats']['wifi_ratio'] = len(wifi_logs) / len(data) if data else 0
-                
-                if validation_results['stats']['wifi_ratio'] < 0.1:
-                    validation_results['warnings'].append("Low ratio of WiFi-related logs (< 10%)")
-                
-                # Check time range
-                if data:
-                    timestamps = [log.get('timestamp') for log in data if log.get('timestamp')]
-                    if timestamps:
-                        try:
-                            times = [pd.to_datetime(ts) for ts in timestamps]
-                            time_range = max(times) - min(times)
-                            validation_results['stats']['time_range_days'] = time_range.days
-                            
-                            if time_range.days < 1:
-                                validation_results['warnings'].append("Export contains less than 1 day of data")
-                        except:
-                            pass
-            
-            # Determine overall validity
-            if validation_results['errors']:
-                validation_results['is_valid'] = False
-            
-            return validation_results
+            logger.info(f"Trained {model_type} model with {X.shape[0]} samples and {X.shape[1]} features")
+            return model
             
         except Exception as e:
-            logger.error(f"Error validating export file: {e}")
-            return {
-                'is_valid': False,
-                'errors': [f"Validation failed: {str(e)}"],
-                'warnings': [],
-                'stats': {}
-            } 
+            logger.error(f"Error training model: {e}")
+            raise
+    
+    async def _save_model_with_metadata(
+        self,
+        model: Any,
+        features_data: List[Dict[str, Any]],
+        evaluation_results: Dict[str, Any],
+        export_file: str,
+        training_id: str,
+        model_type: str
+    ) -> Path:
+        """Save model with metadata."""
+        try:
+            # Generate version
+            version = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Create model metadata
+            from .metadata import ModelMetadata
+            metadata = ModelMetadata.create(
+                version=version,
+                model_type=model_type,
+                training_samples=len(features_data),
+                feature_names=list(features_data[0].keys()) if features_data else [],
+                export_files=[export_file],
+                training_id=training_id,
+                model_parameters=self._get_model_parameters(model)
+            )
+            
+            # Update evaluation results
+            metadata.update_evaluation(evaluation_results)
+            metadata.update_export_file_size(Path(export_file).stat().st_size)
+            
+            # Save model files
+            import joblib
+            import tempfile
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Save model
+                model_file = temp_path / "model.joblib"
+                joblib.dump(model, model_file)
+                
+                # Save scaler if available
+                scaler_file = None
+                if self.scaler:
+                    scaler_file = temp_path / "scaler.joblib"
+                    joblib.dump(self.scaler, scaler_file)
+                
+                # Save to registry
+                from .registry import ModelRegistry
+                project_root = Path(__file__).parent.parent.parent.parent
+                models_dir = project_root / "models"
+                registry = ModelRegistry(str(models_dir))
+                
+                model_path = registry.save_model(
+                    version, metadata, model_file, scaler_file
+                )
+            
+            return model_path
+            
+        except Exception as e:
+            logger.error(f"Error saving model: {e}")
+            raise
+    
+    def _get_model_parameters(self, model) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            if hasattr(model, 'get_params'):
+                return model.get_params()
+            else:
+                return {'model_type': type(model).__name__}
+        except Exception as e:
+            logger.error(f"Error getting model parameters: {e}")
+            return {'model_type': 'unknown'} 

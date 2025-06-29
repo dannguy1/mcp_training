@@ -417,10 +417,14 @@ async def get_training_jobs(
         # Convert to TrainingStatus format while preserving original property names
         training_list = []
         for job in jobs:
+            # Extract training_id properly - it should be the key in the jobs_dict
+            training_id = job.get('id') or job.get('training_id')
+            
             # Create a job object that matches what the frontend expects
             job_data = {
-                'id': job.get('training_id', job.get('id', '')),
-                'name': job.get('model_name', job.get('name', f"Training Job {job.get('training_id', job.get('id', ''))}")),
+                'id': training_id,
+                'training_id': training_id,  # Ensure training_id is explicitly set
+                'name': job.get('model_name', job.get('name', f"Training Job {training_id}")),
                 'status': job.get('status', 'unknown'),
                 'progress': job.get('progress', 0.0),
                 'step': job.get('step', job.get('current_step', '')),
@@ -437,7 +441,7 @@ async def get_training_jobs(
             }
             
             training_status = TrainingStatus(
-                training_id=job_data['id'],
+                training_id=job_data['training_id'],
                 status=job_data['status'],
                 progress=job_data['progress'],
                 current_step=job_data['step'],

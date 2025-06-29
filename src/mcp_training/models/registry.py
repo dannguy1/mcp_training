@@ -19,7 +19,11 @@ class ModelRegistry:
     
     def __init__(self, models_dir: str = "models"):
         """Initialize model registry."""
-        self.models_dir = Path(models_dir)
+        # Get project root (assuming this is the directory containing the main.py file)
+        project_root = Path(__file__).parent.parent.parent.parent
+        
+        # Convert relative path to absolute path
+        self.models_dir = project_root / models_dir
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self._models_cache: Optional[Dict[str, ModelMetadata]] = None
     
@@ -29,6 +33,16 @@ class ModelRegistry:
         
         for model_dir in self.models_dir.iterdir():
             if model_dir.is_dir():
+                # Skip non-model directories
+                if model_dir.name in ['deployments', '.git', '__pycache__']:
+                    continue
+                
+                # Check if directory contains model metadata
+                metadata_file = model_dir / "metadata.json"
+                if not metadata_file.exists():
+                    logger.debug(f"Skipping directory without metadata: {model_dir}")
+                    continue
+                
                 try:
                     metadata = ModelMetadata.load(model_dir)
                     models.append({

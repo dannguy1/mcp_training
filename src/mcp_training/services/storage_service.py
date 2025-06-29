@@ -33,14 +33,18 @@ class StorageService:
         """Initialize storage service.
         
         Args:
-            models_dir: Directory for storing models
-            exports_dir: Directory for storing exports
-            logs_dir: Directory for storing logs
+            models_dir: Directory for storing trained models
+            exports_dir: Directory for storing export files
+            logs_dir: Directory for storing log files
             temp_dir: Directory for temporary files
         """
-        self.models_dir = Path(models_dir)
-        self.exports_dir = Path(exports_dir)
-        self.logs_dir = Path(logs_dir)
+        # Get project root (assuming this is the directory containing the main.py file)
+        project_root = Path(__file__).parent.parent.parent.parent
+        
+        # Convert relative paths to absolute paths
+        self.models_dir = project_root / models_dir
+        self.exports_dir = project_root / exports_dir
+        self.logs_dir = project_root / logs_dir
         self.temp_dir = Path(temp_dir)
         
         # Ensure directories exist
