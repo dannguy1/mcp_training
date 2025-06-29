@@ -510,8 +510,25 @@ class MCPTrainingApp {
         // Show notification for completed jobs
         if (data.status === 'completed') {
             utils.showSuccess(`Training job ${data.job_id} completed successfully`);
+            
+            // Refresh the entire training table to ensure UI is up to date
+            if (typeof trainingManager !== 'undefined') {
+                trainingManager.loadTrainingJobs();
+            }
+            
+            // Clear any loading states that might be active
+            utils.hideLoading();
+            
         } else if (data.status === 'failed') {
             utils.showError(`Training job ${data.job_id} failed`);
+            
+            // Refresh the training table to show the failed state
+            if (typeof trainingManager !== 'undefined') {
+                trainingManager.loadTrainingJobs();
+            }
+            
+            // Clear any loading states
+            utils.hideLoading();
         }
     }
     
@@ -559,15 +576,18 @@ class MCPTrainingApp {
         
         // Add keyboard shortcuts for emergency recovery
         document.addEventListener('keydown', (event) => {
-            // Ctrl+Shift+R to force hide all loading states
+            // Ctrl+Shift+R to force hide all loading states and refresh current page
             if (event.ctrlKey && event.shiftKey && event.key === 'R') {
                 event.preventDefault();
-                console.log('Emergency recovery: Force hiding all loading states');
+                console.log('Emergency recovery: Force hiding all loading states and refreshing page');
                 if (typeof utils !== 'undefined') {
                     utils.forceHideAllLoading();
                 }
                 this.clearConnectionError();
-                utils.showInfo('All loading states cleared. UI should be responsive now.');
+                
+                // Refresh the current page data
+                this.loadPageData();
+                utils.showInfo('All loading states cleared and page refreshed. UI should be responsive now.');
             }
             
             // Ctrl+Shift+C to reconnect WebSocket
@@ -593,6 +613,18 @@ class MCPTrainingApp {
                 } else {
                     this.startAutoRefresh();
                     utils.showInfo('Auto-refresh enabled (5 min intervals)');
+                }
+            }
+            
+            // Ctrl+Shift+T to force refresh training page specifically
+            if (event.ctrlKey && event.shiftKey && event.key === 'T') {
+                event.preventDefault();
+                console.log('Emergency recovery: Force refreshing training page');
+                if (typeof trainingManager !== 'undefined') {
+                    trainingManager.loadTrainingJobs();
+                    utils.showInfo('Training page refreshed.');
+                } else {
+                    utils.showInfo('Training manager not available. Please navigate to Training page first.');
                 }
             }
         });

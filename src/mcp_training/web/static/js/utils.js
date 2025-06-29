@@ -190,20 +190,35 @@ function showLoading(message = 'Loading...') {
             messageElement.textContent = message;
         }
         
+        // Hide recovery options initially
+        const recoveryElement = overlay.querySelector('.loading-recovery');
+        if (recoveryElement) {
+            recoveryElement.style.display = 'none';
+        }
+        
         overlay.style.display = 'flex';
         console.log('Loading overlay shown:', message);
         
-        // Auto-hide after 20 seconds to prevent stuck loading state (increased from 15)
+        // Show recovery options after 10 seconds
+        const recoveryTimeoutId = setTimeout(() => {
+            if (overlay.style.display === 'flex' && recoveryElement) {
+                recoveryElement.style.display = 'block';
+                console.log('Recovery options shown after timeout');
+            }
+        }, 10000);
+        
+        // Auto-hide after 30 seconds to prevent stuck loading state
         const timeoutId = setTimeout(() => {
             if (overlay.style.display === 'flex') {
                 console.warn('Loading overlay auto-hidden after timeout');
                 hideLoading();
                 showWarning('Operation timed out. Please try again.');
             }
-        }, 20000);
+        }, 30000);
         
-        // Store timeout ID for potential cancellation
+        // Store timeout IDs for potential cancellation
         overlay.dataset.timeoutId = timeoutId;
+        overlay.dataset.recoveryTimeoutId = recoveryTimeoutId;
     } else {
         console.warn('Loading overlay element not found');
     }
@@ -212,10 +227,20 @@ function showLoading(message = 'Loading...') {
 function hideLoading() {
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) {
-        // Clear any pending timeout
+        // Clear any pending timeouts
         if (overlay.dataset.timeoutId) {
             clearTimeout(parseInt(overlay.dataset.timeoutId));
             delete overlay.dataset.timeoutId;
+        }
+        if (overlay.dataset.recoveryTimeoutId) {
+            clearTimeout(parseInt(overlay.dataset.recoveryTimeoutId));
+            delete overlay.dataset.recoveryTimeoutId;
+        }
+        
+        // Hide recovery options
+        const recoveryElement = overlay.querySelector('.loading-recovery');
+        if (recoveryElement) {
+            recoveryElement.style.display = 'none';
         }
         
         overlay.style.display = 'none';

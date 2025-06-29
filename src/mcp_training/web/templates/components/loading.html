@@ -1,7 +1,19 @@
 <div class="loading-overlay" id="loadingOverlay" style="display: none;">
     <div class="d-flex justify-content-center align-items-center" style="min-height: 200px;">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="loading-message mb-3">Loading...</div>
+            <div class="loading-recovery" style="display: none;">
+                <small class="text-muted d-block mb-2">If this takes too long, you can:</small>
+                <button class="btn btn-sm btn-outline-secondary me-2" onclick="utils.forceHideAllLoading()">
+                    <i class="bi bi-x-circle"></i> Clear Loading
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Page
+                </button>
+            </div>
         </div>
     </div>
 </div> 

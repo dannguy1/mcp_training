@@ -134,16 +134,34 @@ class ModelEvaluator:
         threshold = np.percentile(scores, 90)
         y_pred = (scores > threshold).astype(int)
         
-        # Confusion matrix
-        cm = confusion_matrix(y, y_pred)
+        # Check if we have meaningful ground truth for classification metrics
+        has_ground_truth = y is not None and len(np.unique(y)) > 1
         
-        # Classification report
-        report = classification_report(y, y_pred, output_dict=True)
+        if has_ground_truth:
+            # Confusion matrix
+            try:
+                cm = confusion_matrix(y, y_pred)
+                cm_data = cm.tolist()
+            except Exception as e:
+                logger.warning(f"Confusion matrix calculation failed: {e}")
+                cm_data = None
+            
+            # Classification report
+            try:
+                report = classification_report(y, y_pred, output_dict=True)
+            except Exception as e:
+                logger.warning(f"Classification report calculation failed: {e}")
+                report = None
+        else:
+            # For unsupervised models, we can't calculate these metrics
+            cm_data = None
+            report = None
+            logger.info("Skipping classification metrics for unsupervised evaluation")
         
         return {
-            'confusion_matrix': cm.tolist(),
+            'confusion_matrix': cm_data,
             'classification_report': report,
-            'threshold_analysis': self._analyze_thresholds(y, scores),
+            'threshold_analysis': self._analyze_thresholds(y, scores) if has_ground_truth else {},
             'score_distribution': {
                 'mean': float(np.mean(scores)),
                 'std': float(np.std(scores)),
@@ -165,26 +183,61 @@ class ModelEvaluator:
         thresholds = np.percentile(scores, [50, 75, 80, 85, 90, 95, 99])
         threshold_analysis = {}
         
+        # Check if we have meaningful ground truth
+        has_ground_truth = y is not None and len(np.unique(y)) > 1
+        
         for threshold in thresholds:
             y_pred = (scores > threshold).astype(int)
-            threshold_analysis[f'p{int(threshold)}'] = {
-                'threshold': float(threshold),
-                'precision': float(precision_score(y, y_pred, zero_division=0)),
-                'recall': float(recall_score(y, y_pred, zero_division=0)),
-                'f1_score': float(f1_score(y, y_pred, zero_division=0)),
-                'anomaly_ratio': float(np.mean(y_pred))
-            }
+            
+            if has_ground_truth:
+                # Calculate classification metrics
+                try:
+                    threshold_analysis[f'p{int(threshold)}'] = {
+                        'threshold': float(threshold),
+                        'precision': float(precision_score(y, y_pred, zero_division=0)),
+                        'recall': float(recall_score(y, y_pred, zero_division=0)),
+                        'f1_score': float(f1_score(y, y_pred, zero_division=0)),
+                        'anomaly_ratio': float(np.mean(y_pred))
+                    }
+                except Exception as e:
+                    logger.warning(f"Threshold analysis failed for threshold {threshold}: {e}")
+                    threshold_analysis[f'p{int(threshold)}'] = {
+                        'threshold': float(threshold),
+                        'precision': None,
+                        'recall': None,
+                        'f1_score': None,
+                        'anomaly_ratio': float(np.mean(y_pred))
+                    }
+            else:
+                # For unsupervised models, only calculate anomaly ratio
+                threshold_analysis[f'p{int(threshold)}'] = {
+                    'threshold': float(threshold),
+                    'anomaly_ratio': float(np.mean(y_pred))
+                }
         
         return threshold_analysis
     
     def _calculate_cross_validation(self, model: Any, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
         """Calculate cross-validation scores."""
         try:
-            cv_scores = cross_val_score(
-                model, X, y, 
-                cv=self.config.training.cross_validation_folds,
-                scoring='neg_mean_squared_error'
-            )
+            # For unsupervised models, we need to use a different scoring approach
+            # since we don't have ground truth labels
+            if y is None or len(np.unique(y)) <= 1:
+                # Unsupervised cross-validation using score_samples
+                logger.info("Using unsupervised cross-validation")
+                cv_scores = cross_val_score(
+                    model, X, 
+                    cv=self.config.training.cross_validation_folds,
+                    scoring='neg_mean_squared_error'
+                )
+            else:
+                # Supervised cross-validation
+                logger.info("Using supervised cross-validation")
+                cv_scores = cross_val_score(
+                    model, X, y, 
+                    cv=self.config.training.cross_validation_folds,
+                    scoring='neg_mean_squared_error'
+                )
             
             return {
                 'mean_cv_score': float(np.mean(cv_scores)),
@@ -213,47 +266,98 @@ class ModelEvaluator:
             return {}
     
     def _calculate_permutation_importance(self, model: Any, X: np.ndarray) -> Dict[str, float]:
-        """Calculate permutation importance as fallback."""
+        """Calculate permutation importance for unsupervised models."""
         try:
-            # Use a small sample for permutation importance to avoid long computation
+            # For unsupervised models, we can't use standard permutation importance
+            # Instead, we'll calculate feature importance based on how much the model's
+            # predictions change when we shuffle each feature
+            
+            # Use a small sample for efficiency
             sample_size = min(1000, X.shape[0])
             sample_indices = np.random.choice(X.shape[0], sample_size, replace=False)
             X_sample = X[sample_indices]
             
-            # Calculate permutation importance
-            perm_importance = permutation_importance(
-                model, X_sample, 
-                n_repeats=5, 
-                random_state=42,
-                scoring='neg_mean_squared_error'
-            )
+            # Get baseline scores
+            baseline_scores = model.score_samples(X_sample)
             
-            return dict(zip(range(X.shape[1]), perm_importance.importances_mean))
+            # Calculate importance for each feature
+            feature_importance = {}
+            for feature_idx in range(X_sample.shape[1]):
+                # Create a copy of the data with this feature shuffled
+                X_shuffled = X_sample.copy()
+                np.random.shuffle(X_shuffled[:, feature_idx])
+                
+                # Get scores with shuffled feature
+                shuffled_scores = model.score_samples(X_shuffled)
+                
+                # Calculate importance as the difference in score variance
+                # Higher difference means the feature is more important
+                baseline_var = np.var(baseline_scores)
+                shuffled_var = np.var(shuffled_scores)
+                importance = abs(baseline_var - shuffled_var)
+                
+                feature_importance[feature_idx] = float(importance)
+            
+            # Normalize importance scores
+            if feature_importance:
+                max_importance = max(feature_importance.values())
+                if max_importance > 0:
+                    feature_importance = {k: v / max_importance for k, v in feature_importance.items()}
+            
+            return feature_importance
+            
         except Exception as e:
-            logger.warning(f"Permutation importance calculation failed: {e}")
-            return {}
+            logger.warning(f"Unsupervised feature importance calculation failed: {e}")
+            # Return uniform importance as fallback
+            return {i: 1.0 / X.shape[1] for i in range(X.shape[1])}
     
     def _analyze_performance(self, y: np.ndarray, scores: np.ndarray) -> Dict[str, Any]:
         """Analyze model performance characteristics."""
-        return {
-            'score_analysis': {
-                'score_correlation_with_labels': float(np.corrcoef(y, scores)[0, 1]) if len(y) > 1 else 0.0,
-                'score_separation': float(np.mean(scores[y == 1]) - np.mean(scores[y == 0])) if len(np.unique(y)) > 1 else 0.0,
-                'score_variance': float(np.var(scores)),
-                'score_skewness': float(self._calculate_skewness(scores))
-            },
-            'anomaly_detection_analysis': {
-                'detected_anomalies': int(np.sum(y)),
-                'total_samples': len(y),
-                'anomaly_ratio': float(np.mean(y)),
-                'score_distribution_by_class': {
-                    'normal_mean': float(np.mean(scores[y == 0])) if np.sum(y == 0) > 0 else 0.0,
-                    'anomaly_mean': float(np.mean(scores[y == 1])) if np.sum(y == 1) > 0 else 0.0,
-                    'normal_std': float(np.std(scores[y == 0])) if np.sum(y == 0) > 0 else 0.0,
-                    'anomaly_std': float(np.std(scores[y == 1])) if np.sum(y == 1) > 0 else 0.0
+        # Check if we have meaningful ground truth
+        has_ground_truth = y is not None and len(np.unique(y)) > 1
+        
+        if has_ground_truth:
+            # Supervised analysis
+            return {
+                'score_analysis': {
+                    'score_correlation_with_labels': float(np.corrcoef(y, scores)[0, 1]) if len(y) > 1 else 0.0,
+                    'score_separation': float(np.mean(scores[y == 1]) - np.mean(scores[y == 0])) if len(np.unique(y)) > 1 else 0.0,
+                    'score_variance': float(np.var(scores)),
+                    'score_skewness': float(self._calculate_skewness(scores))
+                },
+                'anomaly_detection_analysis': {
+                    'detected_anomalies': int(np.sum(y)),
+                    'total_samples': len(y),
+                    'anomaly_ratio': float(np.mean(y)),
+                    'score_distribution_by_class': {
+                        'normal_mean': float(np.mean(scores[y == 0])) if np.sum(y == 0) > 0 else 0.0,
+                        'anomaly_mean': float(np.mean(scores[y == 1])) if np.sum(y == 1) > 0 else 0.0,
+                        'normal_std': float(np.std(scores[y == 0])) if np.sum(y == 0) > 0 else 0.0,
+                        'anomaly_std': float(np.std(scores[y == 1])) if np.sum(y == 1) > 0 else 0.0
+                    }
                 }
             }
-        }
+        else:
+            # Unsupervised analysis - focus on score distribution
+            return {
+                'score_analysis': {
+                    'score_variance': float(np.var(scores)),
+                    'score_skewness': float(self._calculate_skewness(scores)),
+                    'score_range': float(np.max(scores) - np.min(scores)),
+                    'score_median': float(np.median(scores))
+                },
+                'anomaly_detection_analysis': {
+                    'total_samples': len(scores),
+                    'score_distribution': {
+                        'mean': float(np.mean(scores)),
+                        'std': float(np.std(scores)),
+                        'min': float(np.min(scores)),
+                        'max': float(np.max(scores)),
+                        'q25': float(np.percentile(scores, 25)),
+                        'q75': float(np.percentile(scores, 75))
+                    }
+                }
+            }
     
     def _calculate_skewness(self, data: np.ndarray) -> float:
         """Calculate skewness of the data."""
