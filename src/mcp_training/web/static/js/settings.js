@@ -393,10 +393,127 @@ class SettingsManager {
     }
     
     handleTabChange(tabId) {
-        // Validate current tab before switching
-        const currentTab = document.querySelector('.tab-pane.active');
-        if (currentTab) {
-            this.validateTab(currentTab.id);
+        // Handle tab-specific logic if needed
+        console.log('Tab changed to:', tabId);
+    }
+    
+    async loadTabData(tabId) {
+        try {
+            console.log('Loading data for tab:', tabId);
+            
+            // Extract tab name from the target (e.g., "#training" -> "training")
+            const tabName = tabId.replace('#', '');
+            
+            switch (tabName) {
+                case 'training':
+                    await this.loadTrainingTabData();
+                    break;
+                case 'storage':
+                    await this.loadStorageTabData();
+                    break;
+                case 'logging':
+                    await this.loadLoggingTabData();
+                    break;
+                case 'security':
+                    await this.loadSecurityTabData();
+                    break;
+                case 'advanced':
+                    await this.loadAdvancedTabData();
+                    break;
+                default:
+                    // General tab doesn't need special loading
+                    break;
+            }
+        } catch (error) {
+            console.error('Failed to load tab data:', error);
+            // Don't show error to user for tab loading failures
+        }
+    }
+    
+    async loadTrainingTabData() {
+        try {
+            // Load training-specific data if needed
+            const response = await utils.apiCall('/api/settings/training/config');
+            if (response && response.config) {
+                // Update training configuration fields if needed
+                this.setFormValue('defaultConfig', JSON.stringify(response.config, null, 2));
+            }
+        } catch (error) {
+            console.error('Failed to load training tab data:', error);
+            // Don't show error to user - this is optional data
+        }
+    }
+    
+    async loadStorageTabData() {
+        try {
+            // Load storage-specific data if needed
+            const response = await utils.apiCall('/api/settings/storage/info');
+            if (response && response.storage_info) {
+                // Update storage information if needed
+                this.updateStorageInfo(response.storage_info);
+            }
+        } catch (error) {
+            console.error('Failed to load storage tab data:', error);
+            // Don't show error to user - this is optional data
+        }
+    }
+    
+    async loadLoggingTabData() {
+        try {
+            // Load logging-specific data if needed
+            const response = await utils.apiCall('/api/logs/info');
+            if (response && response.files) {
+                // Update logging information if needed
+                this.updateLoggingInfo(response);
+            }
+        } catch (error) {
+            console.error('Failed to load logging tab data:', error);
+            // Don't show error to user - this is optional data
+        }
+    }
+    
+    async loadSecurityTabData() {
+        try {
+            // Load security-specific data if needed
+            // This could include certificate info, authentication settings, etc.
+            console.log('Security tab data loaded');
+        } catch (error) {
+            console.error('Failed to load security tab data:', error);
+        }
+    }
+    
+    async loadAdvancedTabData() {
+        try {
+            // Load advanced-specific data if needed
+            // This could include system configuration, performance settings, etc.
+            console.log('Advanced tab data loaded');
+        } catch (error) {
+            console.error('Failed to load advanced tab data:', error);
+        }
+    }
+    
+    updateStorageInfo(storageInfo) {
+        // Update storage information display if needed
+        const storageInfoElement = document.getElementById('storageInfo');
+        if (storageInfoElement && storageInfo) {
+            storageInfoElement.innerHTML = `
+                <div class="alert alert-info">
+                    <strong>Storage Usage:</strong> ${storageInfo.used || 0} GB / ${storageInfo.total || 0} GB
+                </div>
+            `;
+        }
+    }
+    
+    updateLoggingInfo(loggingInfo) {
+        // Update logging information display if needed
+        const loggingInfoElement = document.getElementById('loggingInfo');
+        if (loggingInfoElement && loggingInfo) {
+            loggingInfoElement.innerHTML = `
+                <div class="alert alert-info">
+                    <strong>Log Files:</strong> ${loggingInfo.total_files || 0} files, 
+                    ${loggingInfo.total_size_mb || 0} MB total
+                </div>
+            `;
         }
     }
     
