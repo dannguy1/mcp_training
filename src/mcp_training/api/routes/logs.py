@@ -47,7 +47,8 @@ async def broadcast_log_entry(log_entry: Dict[str, Any]):
         # WebSocket not available, skip broadcasting
         pass
     except Exception as e:
-        print(f"Failed to broadcast log entry: {e}")
+        logger = get_logger(__name__)
+        logger.error(f"Failed to broadcast log entry: {e}")
 
 
 def _read_training_logs(log_file_path: str, max_lines: int = 1000) -> List[Dict[str, Any]]:

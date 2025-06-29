@@ -30,6 +30,9 @@ async def lifespan(app: FastAPI):
     logger = get_logger(__name__)
     logger.info("Starting MCP Training Service...")
     
+    # Background task for periodic system status broadcasts
+    background_task = None
+    
     try:
         # Load configuration
         config = get_config()
@@ -77,6 +80,55 @@ async def lifespan(app: FastAPI):
         # Register services with dependency injection
         set_services(training_service, model_service, storage_service)
         
+        # Start periodic system status broadcast task
+        import asyncio
+        from .routes.websocket import broadcast_system_status
+        from .routes.health import health_status
+        
+        async def get_system_status():
+            """Get system status without requiring a request object."""
+            try:
+                # Create a mock request object for the health_status function
+                from fastapi import Request
+                from starlette.datastructures import State
+                
+                # Create a minimal mock request
+                mock_request = Request(scope={
+                    'type': 'http',
+                    'method': 'GET',
+                    'path': '/api/health/status',
+                    'headers': [],
+                    'state': State()
+                })
+                
+                return await health_status(mock_request)
+            except Exception as e:
+                logger.warning(f"Failed to get system status: {e}")
+                return {
+                    "system_status": "error",
+                    "active_jobs": 0,
+                    "total_models": 0,
+                    "storage_used": "0 GB",
+                    "version": "1.0.0",
+                    "uptime": "0 days",
+                    "cpu_usage": "0%",
+                    "memory_usage": "0%"
+                }
+        
+        async def periodic_status_broadcast():
+            """Periodically broadcast system status to keep WebSocket connections alive."""
+            while True:
+                try:
+                    await asyncio.sleep(30)  # Broadcast every 30 seconds
+                    status = await get_system_status()
+                    await broadcast_system_status(status)
+                except Exception as e:
+                    logger.warning(f"Failed to broadcast system status: {e}")
+                    await asyncio.sleep(5)  # Wait a bit before retrying
+        
+        background_task = asyncio.create_task(periodic_status_broadcast())
+        logger.info("Periodic system status broadcast task started")
+        
         logger.info("MCP Training Service started successfully")
         
     except Exception as e:
@@ -87,6 +139,15 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down MCP Training Service...")
+    
+    # Cancel background task
+    if background_task:
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Periodic system status broadcast task cancelled")
     
     # Cleanup services
     if training_service:

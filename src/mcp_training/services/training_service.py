@@ -209,6 +209,53 @@ class TrainingService:
                 })
             else:
                 self.training_tasks[training_id]['status'] = 'running'
+            
+            # Broadcast progress update via WebSocket
+            try:
+                from ..api.routes.websocket import broadcast_training_update
+                
+                # Create async task to broadcast
+                async def broadcast():
+                    try:
+                        status = 'running'
+                        if error:
+                            status = 'failed'
+                        elif result:
+                            status = 'completed'
+                        
+                        await broadcast_training_update(
+                            job_id=training_id,
+                            progress=progress,
+                            status=status,
+                            step=step,
+                            error=error,
+                            result=result
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to broadcast training update: {e}")
+                
+                # Run in event loop if available
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Schedule the broadcast task
+                    loop.create_task(broadcast())
+                except RuntimeError:
+                    # No running event loop, try to get the current one
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(broadcast())
+                        else:
+                            # Create a new task in the event loop
+                            future = asyncio.run_coroutine_threadsafe(broadcast(), loop)
+                            future.result(timeout=5)  # Wait up to 5 seconds
+                    except Exception as e:
+                        logger.warning(f"Could not broadcast training update: {e}")
+                        
+            except ImportError:
+                logger.warning("WebSocket broadcasting not available")
+            except Exception as e:
+                logger.error(f"Failed to broadcast training update: {e}")
     
     def get_training_status(self, training_id: str) -> Optional[Dict[str, Any]]:
         """Get training job status."""

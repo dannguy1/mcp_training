@@ -316,4 +316,37 @@ main {
 
 .badge.bg-secondary {
     background-color: #6c757d !important;
+}
+
+/* Connection Indicator */
+.connection-indicator {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.connection-indicator.connection-error {
+    background-color: rgba(220, 53, 69, 0.9);
+    animation: pulse 2s infinite;
+}
+
+.connection-indicator.connection-success {
+    background-color: rgba(25, 135, 84, 0.9);
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
 } 

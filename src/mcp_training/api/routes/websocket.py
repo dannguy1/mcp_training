@@ -84,6 +84,26 @@ async def websocket_endpoint(websocket: WebSocket):
     """General WebSocket endpoint for real-time updates."""
     await manager.connect(websocket, "general")
     try:
+        # Send initial system status
+        try:
+            from .health import health_status
+            from fastapi import Request
+            from starlette.datastructures import State
+            
+            # Create a minimal mock request
+            mock_request = Request(scope={
+                'type': 'http',
+                'method': 'GET',
+                'path': '/api/health/status',
+                'headers': [],
+                'state': State()
+            })
+            
+            status = await health_status(mock_request)
+            await broadcast_system_status(status)
+        except Exception as e:
+            logger.warning(f"Failed to send initial system status: {e}")
+        
         while True:
             # Keep connection alive and handle any incoming messages
             data = await websocket.receive_text()

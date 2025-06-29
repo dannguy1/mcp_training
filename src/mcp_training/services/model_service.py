@@ -174,23 +174,33 @@ class ModelService:
                 
                 # Create async task to broadcast
                 async def broadcast():
-                    await broadcast_model_ready(
-                        model_id=version,
-                        deployed_by=deployed_by,
-                        deployed_at=datetime.now().isoformat(),
-                        deployment_package=str(deployment_package_path)
-                    )
+                    try:
+                        await broadcast_model_ready(
+                            model_id=version,
+                            deployed_by=deployed_by,
+                            deployed_at=datetime.now().isoformat(),
+                            deployment_package=str(deployment_package_path)
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to broadcast model ready notification: {e}")
                 
                 # Run in event loop if available
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(broadcast())
-                    else:
-                        loop.run_until_complete(broadcast())
+                    loop = asyncio.get_running_loop()
+                    # Schedule the broadcast task
+                    loop.create_task(broadcast())
                 except RuntimeError:
-                    # No event loop, skip broadcasting
-                    pass
+                    # No running event loop, try to get the current one
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(broadcast())
+                        else:
+                            # Create a new task in the event loop
+                            future = asyncio.run_coroutine_threadsafe(broadcast(), loop)
+                            future.result(timeout=5)  # Wait up to 5 seconds
+                    except Exception as e:
+                        logger.warning(f"Could not broadcast model ready notification: {e}")
                     
             except ImportError:
                 logger.warning("WebSocket broadcasting not available")

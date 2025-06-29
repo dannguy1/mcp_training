@@ -112,6 +112,17 @@ function showLoading() {
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) {
         overlay.style.display = 'flex';
+        console.log('Loading overlay shown');
+        
+        // Auto-hide after 15 seconds to prevent stuck loading state (increased from 10)
+        setTimeout(() => {
+            if (overlay.style.display === 'flex') {
+                console.warn('Loading overlay auto-hidden after timeout');
+                hideLoading();
+            }
+        }, 15000);
+    } else {
+        console.warn('Loading overlay element not found');
     }
 }
 
@@ -119,6 +130,9 @@ function hideLoading() {
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) {
         overlay.style.display = 'none';
+        console.log('Loading overlay hidden');
+    } else {
+        console.warn('Loading overlay element not found');
     }
 }
 
@@ -372,4 +386,17 @@ window.utils = {
     initTooltips,
     initPopovers,
     logout
-}; 
+};
+
+// Global function for debugging loading overlay
+window.forceHideLoading = function() {
+    console.log('Force hiding loading overlay...');
+    hideLoading();
+};
+
+// Auto-hide loading overlay on page load to prevent stuck state
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        hideLoading();
+    }, 1000);
+}); 

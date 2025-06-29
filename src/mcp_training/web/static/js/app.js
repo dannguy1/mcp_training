@@ -18,6 +18,7 @@ class MCPTrainingApp {
         this.loadPageData();
         this.setupWebSocket();
         this.startAutoRefresh();
+        this.setupPageUnloadDetection();
     }
     
     setupEventListeners() {
@@ -343,6 +344,8 @@ class MCPTrainingApp {
             
             this.websocket.onopen = () => {
                 console.log('WebSocket connected');
+                // Clear any connection error indicators
+                this.clearConnectionError();
             };
             
             this.websocket.onmessage = (event) => {
@@ -356,17 +359,43 @@ class MCPTrainingApp {
             
             this.websocket.onerror = (error) => {
                 console.error('WebSocket error:', error);
+                this.showConnectionError();
             };
             
-            this.websocket.onclose = () => {
-                console.log('WebSocket disconnected');
-                // Attempt to reconnect after 5 seconds
+            this.websocket.onclose = (event) => {
+                console.log('WebSocket disconnected', event.code, event.reason);
+                
+                // Don't show loading state for normal closures or during page unload
+                if (event.code !== 1000 && event.code !== 1001 && !this.isPageUnloading) {
+                    this.showConnectionError();
+                }
+                
+                // Attempt to reconnect after 10 seconds (increased from 5)
                 setTimeout(() => {
-                    this.setupWebSocket();
-                }, 5000);
+                    if (!this.isPageUnloading) {
+                        this.setupWebSocket();
+                    }
+                }, 10000);
             };
         } catch (error) {
             console.error('Failed to setup WebSocket:', error);
+        }
+    }
+    
+    showConnectionError() {
+        // Show a subtle connection indicator instead of full loading overlay
+        const indicator = document.getElementById('connectionIndicator');
+        if (indicator) {
+            indicator.style.display = 'block';
+            indicator.className = 'connection-indicator connection-error';
+            indicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Connection lost, reconnecting...';
+        }
+    }
+    
+    clearConnectionError() {
+        const indicator = document.getElementById('connectionIndicator');
+        if (indicator) {
+            indicator.style.display = 'none';
         }
     }
     
@@ -421,10 +450,10 @@ class MCPTrainingApp {
     }
     
     startAutoRefresh() {
-        // Refresh data every 30 seconds
+        // Refresh data every 60 seconds (increased from 30 to reduce loading states)
         this.autoRefreshInterval = setInterval(() => {
             this.loadPageData();
-        }, 30000);
+        }, 60000);
     }
     
     stopAutoRefresh() {
@@ -432,6 +461,19 @@ class MCPTrainingApp {
             clearInterval(this.autoRefreshInterval);
             this.autoRefreshInterval = null;
         }
+    }
+    
+    // Add page unload detection to prevent reconnection attempts
+    setupPageUnloadDetection() {
+        this.isPageUnloading = false;
+        
+        window.addEventListener('beforeunload', () => {
+            this.isPageUnloading = true;
+            this.stopAutoRefresh();
+            if (this.websocket) {
+                this.websocket.close(1000, 'Page unload');
+            }
+        });
     }
     
     // Action methods
