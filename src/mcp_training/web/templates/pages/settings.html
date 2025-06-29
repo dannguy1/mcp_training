@@ -294,6 +294,26 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
+                                        <label for="trainingOnlyLogging" class="form-label">Training-Only Logging</label>
+                                        <select class="form-select" id="trainingOnlyLogging">
+                                            <option value="true" selected>Enabled</option>
+                                            <option value="false">Disabled</option>
+                                        </select>
+                                        <div class="form-text">Only log training-related events (recommended for training systems).</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="logRetention" class="form-label">Log Retention (days)</label>
+                                        <input type="number" class="form-control" id="logRetention" value="30" min="1" max="365">
+                                        <div class="form-text">How long to keep log files.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
                                         <label for="logFile" class="form-label">Log File</label>
                                         <input type="text" class="form-control" id="logFile" value="logs/mcp_training.log">
                                         <div class="form-text">Path to log file.</div>

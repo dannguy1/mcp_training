@@ -11,6 +11,62 @@ import json
 from datetime import datetime
 
 
+class TrainingFilter(logging.Filter):
+    """Filter to only log training-related events."""
+    
+    def __init__(self):
+        super().__init__()
+        # Training-related logger names and patterns
+        self.training_patterns = [
+            'training',
+            'model_trainer',
+            'training_pipeline',
+            'training_service',
+            'model_evaluator',
+            'feature_extractor',
+            'model_registry',
+            'export_validator'
+        ]
+        
+        # Non-training patterns to exclude
+        self.exclude_patterns = [
+            'api.middleware.logging',  # HTTP request/response logging
+            'api.routes.websocket',    # WebSocket connection logging
+            'api.app',                 # Application lifecycle
+            'api.middleware.cors',     # CORS configuration
+            'api.middleware.auth',     # Authentication
+            'core.config',             # Configuration loading
+            'services.storage_service', # Storage operations (unless training-related)
+            'services.model_service',   # Model service (unless training-related)
+        ]
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filter log records to only include training-related events."""
+        logger_name = record.name.lower()
+        
+        # Check if this is a training-related logger
+        is_training = any(pattern in logger_name for pattern in self.training_patterns)
+        
+        # Check if this should be excluded
+        is_excluded = any(pattern in logger_name for pattern in self.exclude_patterns)
+        
+        # Special case: Allow training-related messages from excluded loggers
+        if is_excluded:
+            # Check if the message itself is training-related
+            message = record.getMessage().lower()
+            training_keywords = [
+                'training', 'model', 'export', 'feature', 'evaluation',
+                'progress', 'validation', 'pipeline', 'fit', 'predict'
+            ]
+            is_training_message = any(keyword in message for keyword in training_keywords)
+            
+            # Only allow if it's a training-related message
+            return is_training_message
+        
+        # Allow all training-related loggers
+        return is_training
+
+
 class StructuredFormatter(logging.Formatter):
     """Structured JSON formatter for logging."""
     
@@ -43,7 +99,8 @@ def setup_logging(
     log_format: str = "structured",
     max_size: str = "100MB",
     backup_count: int = 10,
-    console_output: bool = True
+    console_output: bool = True,
+    training_only: bool = True
 ) -> None:
     """Setup logging configuration for the application.
     
@@ -54,6 +111,7 @@ def setup_logging(
         max_size: Maximum log file size before rotation
         backup_count: Number of backup files to keep
         console_output: Whether to output to console
+        training_only: Whether to filter to training-related events only
     """
     # Convert string log level to logging constant
     level = getattr(logging, log_level.upper(), logging.INFO)
@@ -78,6 +136,11 @@ def setup_logging(
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(level)
         console_handler.setFormatter(formatter)
+        
+        # Add training filter if requested
+        if training_only:
+            console_handler.addFilter(TrainingFilter())
+        
         root_logger.addHandler(console_handler)
     
     # File handler with rotation
@@ -95,12 +158,29 @@ def setup_logging(
         )
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
+        
+        # Add training filter if requested
+        if training_only:
+            file_handler.addFilter(TrainingFilter())
+        
         root_logger.addHandler(file_handler)
     
-    # Set specific logger levels
-    logging.getLogger("uvicorn").setLevel(logging.WARNING)
-    logging.getLogger("fastapi").setLevel(logging.WARNING)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    # Set specific logger levels for non-training components
+    if training_only:
+        # Reduce noise from non-training components
+        logging.getLogger("uvicorn").setLevel(logging.ERROR)
+        logging.getLogger("fastapi").setLevel(logging.ERROR)
+        logging.getLogger("asyncio").setLevel(logging.ERROR)
+        logging.getLogger("src.mcp_training.api.middleware.logging").setLevel(logging.ERROR)
+        logging.getLogger("src.mcp_training.api.routes.websocket").setLevel(logging.ERROR)
+        logging.getLogger("src.mcp_training.api.app").setLevel(logging.WARNING)
+        logging.getLogger("src.mcp_training.api.middleware.cors").setLevel(logging.ERROR)
+        logging.getLogger("src.mcp_training.core.config").setLevel(logging.WARNING)
+    else:
+        # Standard levels for full logging
+        logging.getLogger("uvicorn").setLevel(logging.WARNING)
+        logging.getLogger("fastapi").setLevel(logging.WARNING)
+        logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -208,4 +288,34 @@ class TrainingLogger:
             self.logger, "info", "Training completed successfully",
             training_id=self.training_id,
             result=result
+        )
+    
+    def log_validation(self, validation_type: str, status: str, details: Dict[str, Any]):
+        """Log validation events.
+        
+        Args:
+            validation_type: Type of validation (export, model, etc.)
+            status: Validation status (passed, failed, etc.)
+            details: Validation details
+        """
+        log_with_context(
+            self.logger, "info", f"Validation {validation_type}: {status}",
+            training_id=self.training_id,
+            validation_type=validation_type,
+            status=status,
+            details=details
+        )
+    
+    def log_model_operation(self, operation: str, model_info: Dict[str, Any]):
+        """Log model operations.
+        
+        Args:
+            operation: Model operation (save, load, evaluate, etc.)
+            model_info: Model information
+        """
+        log_with_context(
+            self.logger, "info", f"Model {operation}",
+            training_id=self.training_id,
+            operation=operation,
+            model_info=model_info
         ) 

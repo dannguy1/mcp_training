@@ -53,6 +53,7 @@ class TrainingConfig(BaseSettings):
     max_log_size_mb: int = Field(default=100, env="TRAINING_MAX_LOG_SIZE_MB")
     log_to_console: bool = Field(default=True, env="TRAINING_LOG_TO_CONSOLE")
     log_to_file: bool = Field(default=True, env="TRAINING_LOG_TO_FILE")
+    training_only_logging: bool = Field(default=True, env="TRAINING_ONLY_LOGGING")
     
     # Monitoring
     enable_monitoring: bool = Field(default=True, env="TRAINING_ENABLE_MONITORING")
@@ -185,7 +186,8 @@ class TrainingConfig(BaseSettings):
                 "log_file": self.log_file,
                 "max_log_size_mb": self.max_log_size_mb,
                 "log_to_console": self.log_to_console,
-                "log_to_file": self.log_to_file
+                "log_to_file": self.log_to_file,
+                "training_only": self.training_only_logging
             },
             "security": {
                 "auth_enabled": self.auth_enabled,
@@ -263,6 +265,8 @@ class TrainingConfig(BaseSettings):
                 self.log_to_console = logging_config["log_to_console"]
             if "log_to_file" in logging_config:
                 self.log_to_file = logging_config["log_to_file"]
+            if "training_only" in logging_config:
+                self.training_only_logging = logging_config["training_only"]
         
         # Update security settings
         if "security" in settings:
@@ -441,7 +445,8 @@ def get_config():
         "logging": {
             "level": config.log_level,
             "file": config.log_file,
-            "format": config.log_format
+            "format": config.log_format,
+            "training_only": config.training_only_logging
         },
         "storage": {
             "models_dir": config.models_dir,

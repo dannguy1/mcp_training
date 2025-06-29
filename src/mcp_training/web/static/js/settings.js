@@ -175,6 +175,7 @@ class SettingsManager {
         // Logging Settings
         this.setFormValue('logLevel', this.settings.logging?.level || 'INFO');
         this.setFormValue('logFormat', this.settings.logging?.format || 'structured');
+        this.setFormValue('trainingOnlyLogging', this.settings.logging?.training_only !== false);
         this.setFormValue('logRotation', this.settings.logging?.rotation || 'daily');
         this.setFormValue('logRetention', this.settings.logging?.retention || 30);
         
@@ -264,6 +265,7 @@ class SettingsManager {
             logging: {
                 level: this.getFormValue('logLevel'),
                 format: this.getFormValue('logFormat'),
+                training_only: this.getFormValue('trainingOnlyLogging'),
                 rotation: this.getFormValue('logRotation'),
                 retention: parseInt(this.getFormValue('logRetention')),
                 enable_monitoring: this.getFormValue('enableMonitoring'),
@@ -532,6 +534,7 @@ class SettingsManager {
             logging: {
                 level: "INFO",
                 format: "structured",
+                training_only: false,
                 rotation: "daily",
                 retention: 30,
                 enable_monitoring: false,

@@ -45,7 +45,8 @@ async def lifespan(app: FastAPI):
         setup_logging(
             log_level=config.get("logging", {}).get("level", "INFO"),
             log_file=config.get("logging", {}).get("file"),
-            log_format=config.get("logging", {}).get("format", "structured")
+            log_format=config.get("logging", {}).get("format", "structured"),
+            training_only=config.get("logging", {}).get("training_only", True)
         )
         
         # Initialize services
