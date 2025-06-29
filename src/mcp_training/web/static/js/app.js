@@ -35,10 +35,26 @@ class MCPTrainingApp {
         });
         
         // Sidebar toggle
-        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        const sidebarToggle = document.getElementById('sidebarToggle');
         if (sidebarToggle) {
             sidebarToggle.addEventListener('click', () => this.toggleSidebar());
         }
+        
+        // Close sidebar on mobile when navigation links are clicked
+        document.querySelectorAll('[data-page]').forEach(link => {
+            link.addEventListener('click', () => {
+                // Close sidebar on mobile devices
+                if (window.innerWidth < 992) {
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar) {
+                        const offcanvas = bootstrap.Offcanvas.getInstance(sidebar);
+                        if (offcanvas) {
+                            offcanvas.hide();
+                        }
+                    }
+                }
+            });
+        });
         
         // Quick actions
         this.updateQuickActions();
