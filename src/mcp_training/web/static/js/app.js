@@ -23,41 +23,48 @@ class MCPTrainingApp {
     }
     
     setupEventListeners() {
-        // Sidebar toggle using Bootstrap offcanvas
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        const sidebar = document.getElementById('sidebar');
-        
-        if (sidebarToggle && sidebar) {
-            sidebarToggle.addEventListener('click', () => {
-                const offcanvas = new bootstrap.Offcanvas(sidebar);
-                offcanvas.show();
-            });
-        }
-        
-        // Close sidebar on mobile when navigation links are clicked
-        document.querySelectorAll('[data-page]').forEach(link => {
-            link.addEventListener('click', () => {
-                // Close sidebar on mobile devices
-                if (window.innerWidth < 992) {
-                    const offcanvas = bootstrap.Offcanvas.getInstance(sidebar);
-                    if (offcanvas) {
-                        offcanvas.hide();
-                    }
+        // Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const href = link.getAttribute('href');
+                if (href && href !== '#') {
+                    window.location.href = href;
                 }
             });
         });
         
-        // Global error handling
-        window.addEventListener('error', (e) => {
-            console.error('Global error:', e.error);
-            utils.showError('An unexpected error occurred', e.error);
-        });
+        // Sidebar toggle
+        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+        }
         
-        // Handle unhandled promise rejections
-        window.addEventListener('unhandledrejection', (e) => {
-            console.error('Unhandled promise rejection:', e.reason);
-            utils.showError('An unexpected error occurred', e.reason);
-        });
+        // Quick actions
+        this.updateQuickActions();
+        
+        // Training modal events
+        const newTrainingModal = document.getElementById('newTrainingModal');
+        if (newTrainingModal) {
+            newTrainingModal.addEventListener('show.bs.modal', () => {
+                this.loadExportFiles();
+            });
+            
+            newTrainingModal.addEventListener('hidden.bs.modal', () => {
+                this.resetTrainingForm();
+            });
+        }
+        
+        // Submit training button
+        const submitTrainingBtn = document.getElementById('submitTrainingBtn');
+        if (submitTrainingBtn) {
+            submitTrainingBtn.addEventListener('click', () => {
+                this.submitTraining();
+            });
+        }
+        
+        // Global error handling
+        this.setupGlobalErrorHandling();
     }
     
     toggleSidebar() {
@@ -589,6 +596,66 @@ class MCPTrainingApp {
     showNewTrainingModal() {
         const modal = new bootstrap.Modal(document.getElementById('newTrainingModal'));
         modal.show();
+        
+        // Load export files when modal opens
+        this.loadExportFiles();
+    }
+    
+    async loadExportFiles() {
+        try {
+            const response = await utils.apiCall('/api/training/exports');
+            const exportFiles = response.exports || [];
+            
+            const exportFilesSelect = document.getElementById('exportFiles');
+            if (exportFilesSelect) {
+                // Clear existing options
+                exportFilesSelect.innerHTML = '<option value="">Select export files...</option>';
+                
+                // Add export files
+                exportFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.path;
+                    option.textContent = file.name;
+                    exportFilesSelect.appendChild(option);
+                });
+                
+                // Enable/disable submit button based on selection
+                exportFilesSelect.addEventListener('change', () => {
+                    const submitBtn = document.getElementById('submitTrainingBtn');
+                    if (submitBtn) {
+                        submitBtn.disabled = exportFilesSelect.selectedOptions.length === 0;
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load export files:', error);
+            utils.showError('Failed to load export files', error);
+        }
+    }
+    
+    resetTrainingForm() {
+        // Reset form fields
+        const jobName = document.getElementById('jobName');
+        const modelConfig = document.getElementById('modelConfig');
+        const maxIterations = document.getElementById('maxIterations');
+        const learningRate = document.getElementById('learningRate');
+        const description = document.getElementById('description');
+        const exportFiles = document.getElementById('exportFiles');
+        
+        if (jobName) jobName.value = '';
+        if (modelConfig) modelConfig.value = '';
+        if (maxIterations) maxIterations.value = '1000';
+        if (learningRate) learningRate.value = '0.01';
+        if (description) description.value = '';
+        if (exportFiles) {
+            exportFiles.innerHTML = '<option value="">Select export files...</option>';
+        }
+        
+        // Disable submit button
+        const submitBtn = document.getElementById('submitTrainingBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
     }
     
     showUploadModal() {
@@ -679,34 +746,69 @@ class MCPTrainingApp {
     
     async submitTraining() {
         try {
-            utils.showLoading();
+            // Validate form first
+            const exportFilesSelect = document.getElementById('exportFiles');
+            const jobName = document.getElementById('jobName')?.value;
+            const modelConfig = document.getElementById('modelConfig')?.value;
             
-            const formData = new FormData();
-            const fileInput = document.getElementById('exportFile');
-            const configSelect = document.getElementById('modelConfig');
-            
-            if (fileInput.files.length === 0) {
-                throw new Error('Please select an export file');
+            if (!exportFilesSelect || exportFilesSelect.selectedOptions.length === 0) {
+                throw new Error('Please select at least one export file');
             }
             
-            formData.append('export_file', fileInput.files[0]);
-            formData.append('config', configSelect.value);
+            if (!jobName || jobName.trim() === '') {
+                throw new Error('Please enter a job name');
+            }
+            
+            if (!modelConfig || modelConfig.trim() === '') {
+                throw new Error('Please select a model configuration');
+            }
+            
+            utils.showLoading();
+            
+            // Get form data
+            const maxIterations = document.getElementById('maxIterations')?.value;
+            const learningRate = document.getElementById('learningRate')?.value;
+            const description = document.getElementById('description')?.value;
+            
+            // Get all selected export files
+            const selectedFiles = Array.from(exportFilesSelect.selectedOptions).map(option => option.value);
+            
+            const requestData = {
+                export_files: selectedFiles,
+                model_cfg: {
+                    type: modelConfig || "isolation_forest",
+                    name: jobName || "Training Job"
+                },
+                training_config: {
+                    max_iterations: parseInt(maxIterations) || 1000,
+                    learning_rate: parseFloat(learningRate) || 0.01
+                }
+            };
+            
+            if (description) {
+                requestData.description = description;
+            }
+            
+            console.log('Submitting training request:', requestData);
             
             const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
-                body: formData,
-                headers: {} // Let browser set content-type for FormData
+                body: JSON.stringify(requestData)
             });
             
             utils.showSuccess('Training job started successfully');
             
-            // Close modal and refresh data
+            // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('newTrainingModal'));
-            modal.hide();
+            if (modal) {
+                modal.hide();
+            }
             
+            // Refresh the training jobs list
             this.loadPageData();
             
         } catch (error) {
+            console.error('Training submission error:', error);
             utils.showError('Failed to start training job', error);
         } finally {
             utils.hideLoading();
