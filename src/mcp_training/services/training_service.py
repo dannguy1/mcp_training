@@ -158,7 +158,7 @@ class TrainingService:
             model_type=model_type,
             training_samples=len(features),
             feature_names=list(features.keys()),
-            export_file=export_file,
+            export_files=[export_file],
             training_id=training_id,
             model_parameters=self.config.model.dict()
         )

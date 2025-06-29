@@ -22,9 +22,12 @@ class ConnectionManager:
         self.connection_types: Dict[WebSocket, str] = {}  # Track connection types (general, logs)
         self.connection_health: Dict[WebSocket, Dict[str, Any]] = {}  # Track connection health
         self.health_check_interval = 30  # Check health every 30 seconds
-        
-        # Start health monitoring
-        asyncio.create_task(self._health_monitor())
+        self.health_monitor_task = None  # Store the health monitor task
+    
+    async def _start_health_monitor(self):
+        """Start health monitoring if not already running."""
+        if self.health_monitor_task is None or self.health_monitor_task.done():
+            self.health_monitor_task = asyncio.create_task(self._health_monitor())
     
     async def connect(self, websocket: WebSocket, connection_type: str = "general"):
         """Accept a new WebSocket connection."""
@@ -37,6 +40,10 @@ class ConnectionManager:
             'message_count': 0,
             'error_count': 0
         }
+        
+        # Start health monitor on first connection
+        await self._start_health_monitor()
+        
         logger.info(f"WebSocket connected: {connection_type} (total: {len(self.active_connections)})")
     
     def disconnect(self, websocket: WebSocket):

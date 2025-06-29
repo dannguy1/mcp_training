@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+from ...utils.logger import get_logger
+from ...services.deps import get_storage_service
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -47,7 +51,6 @@ async def broadcast_log_entry(log_entry: Dict[str, Any]):
         # WebSocket not available, skip broadcasting
         pass
     except Exception as e:
-        logger = get_logger(__name__)
         logger.error(f"Failed to broadcast log entry: {e}")
 
 
@@ -334,7 +337,6 @@ async def clear_logs() -> Dict[str, Any]:
         Status of log clearing operation
     """
     try:
-        from ..deps import get_storage_service
         storage_service = get_storage_service()
         
         # Get logs directory
@@ -383,7 +385,6 @@ async def download_logs() -> Dict[str, Any]:
         Log data for download
     """
     try:
-        from ..deps import get_storage_service
         storage_service = get_storage_service()
         
         # Get logs directory
@@ -435,7 +436,6 @@ async def get_logs_info() -> Dict[str, Any]:
         Log files information
     """
     try:
-        from ..deps import get_storage_service
         storage_service = get_storage_service()
         
         # Get logs directory

@@ -274,7 +274,7 @@ class TrainingPipeline:
             model_type=model_type,
             training_samples=len(X),
             feature_names=feature_names,
-            export_file=export_file_paths,
+            export_files=export_file_paths,
             training_id=training_id,
             model_parameters=self.config.model.dict()
         )
