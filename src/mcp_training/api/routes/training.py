@@ -213,41 +213,6 @@ async def get_training_status(
         raise HTTPException(status_code=500, detail=f"Failed to get training status: {str(e)}")
 
 
-@router.get("/list", response_model=TrainingList)
-async def list_training_jobs(
-    status: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-    training_service: TrainingService = Depends(get_training_service)
-):
-    """List training jobs.
-    
-    Args:
-        status: Filter by status
-        limit: Maximum number of jobs to return
-        offset: Number of jobs to skip
-        training_service: Training service
-        
-    Returns:
-        List of training jobs
-    """
-    try:
-        jobs = await training_service.list_training_jobs(
-            status=status,
-            limit=limit,
-            offset=offset
-        )
-        
-        return TrainingList(
-            trainings=[TrainingStatus(**job) for job in jobs],
-            total=len(jobs)
-        )
-        
-    except Exception as e:
-        logger.error(f"Error listing training jobs: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list training jobs: {str(e)}")
-
-
 @router.delete("/cancel/{training_id}")
 async def cancel_training(
     training_id: str,
@@ -431,7 +396,7 @@ async def upload_export_file(
         raise HTTPException(status_code=500, detail=f"Failed to upload export file: {str(e)}")
 
 
-@router.get("/jobs")
+@router.get("/jobs", response_model=TrainingList)
 async def get_training_jobs(
     status: Optional[str] = None,
     limit: int = 50,
@@ -446,8 +411,28 @@ async def get_training_jobs(
         if status:
             jobs = [job for job in jobs if job.get('status') == status]
         # Apply offset and limit
+        total = len(jobs)
         jobs = jobs[offset:offset+limit]
-        return jobs
+        
+        # Convert to TrainingStatus format
+        training_list = []
+        for job in jobs:
+            training_status = TrainingStatus(
+                training_id=job.get('id', ''),
+                status=job.get('status', 'unknown'),
+                progress=job.get('progress', 0.0),
+                current_step=job.get('step', ''),
+                message=job.get('error', '') or job.get('step', ''),
+                created_at=job.get('start_time', datetime.now()),
+                updated_at=job.get('start_time', datetime.now()),
+                result=job.get('result')
+            )
+            training_list.append(training_status)
+        
+        return TrainingList(
+            trainings=training_list,
+            total=total
+        )
     except Exception as e:
         logger.error(f"Error getting training jobs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get training jobs: {str(e)}")
@@ -540,4 +525,35 @@ async def get_training_job(
         raise
     except Exception as e:
         logger.error(f"Error getting training job {job_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get training job: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get training job: {str(e)}")
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_training_job(
+    job_id: str,
+    training_service: TrainingService = Depends(get_training_service)
+):
+    """Delete a training job.
+    
+    Args:
+        job_id: Training job ID
+        training_service: Training service
+        
+    Returns:
+        Deletion result
+    """
+    try:
+        logger.info(f"Deleting training job: {job_id}")
+        
+        success = await training_service.delete_training_job(job_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Training job not found or cannot be deleted: {job_id}")
+        
+        return {"message": f"Training job {job_id} deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting training job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete training job: {str(e)}") 

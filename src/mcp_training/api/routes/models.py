@@ -87,7 +87,7 @@ class EvaluationResponse(BaseModel):
 
 
 # Model endpoints
-@router.get("/")
+@router.get("/", response_model=ModelList)
 async def get_models(
     status: Optional[str] = None,
     model_type: Optional[str] = None,
@@ -158,92 +158,14 @@ async def get_models(
             )
             model_list.append(model_info)
         
-        return model_list
-        
-    except Exception as e:
-        logger.error(f"Error getting models: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
-
-
-@router.get("/list", response_model=ModelList)
-async def list_models(
-    status: Optional[str] = None,
-    model_type: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-    model_service: ModelService = Depends(get_model_service)
-):
-    """List available models.
-    
-    Args:
-        status: Filter by status
-        model_type: Filter by model type
-        limit: Maximum number of models to return
-        offset: Number of models to skip
-        model_service: Model service
-        
-    Returns:
-        List of models
-    """
-    try:
-        models = model_service.list_models()
-        
-        # Apply filters
-        if status:
-            models = [m for m in models if m.get('deployment_status') == status]
-        if model_type:
-            models = [m for m in models if m.get('model_type') == model_type]
-        
-        # Apply pagination
-        total = len(models)
-        models = models[offset:offset + limit]
-        
-        # Convert to ModelInfo format
-        model_list = []
-        for model in models:
-            # Map deployment status to frontend expected status
-            status = model['deployment_status']
-            if status == 'available':
-                status = 'ready'  # Frontend expects 'ready' for available models
-            elif status == 'deployed':
-                status = 'deployed'  # Keep as is
-            else:
-                status = 'ready'  # Default to ready for other statuses
-            
-            # Try to get file size from metadata, else from model.joblib
-            file_size = model.get('file_size')
-            if not file_size:
-                # Try to get from model.joblib
-                model_path = Path(model['path']) / 'model.joblib'
-                if model_path.exists():
-                    file_size = model_path.stat().st_size
-                else:
-                    file_size = 0
-            
-            model_info = ModelInfo(
-                version=model['version'],
-                id=model['version'],
-                name=f"Model {model['version']}",
-                type=model['model_type'],
-                status=status,
-                created_at=model['created_at'],
-                updated_at=model['created_at'],  # Use created_at as updated_at for now
-                deployed_at=None,  # Will be set when deployed
-                deployed_by=None,  # Will be set when deployed
-                metrics=None,  # Could be added later
-                file_size=file_size,
-                size=file_size
-            )
-            model_list.append(model_info)
-        
         return ModelList(
             models=model_list,
             total=total
         )
         
     except Exception as e:
-        logger.error(f"Error listing models: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list models: {str(e)}")
+        logger.error(f"Error getting models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
 
 
 @router.get("/{version}", response_model=ModelInfo)

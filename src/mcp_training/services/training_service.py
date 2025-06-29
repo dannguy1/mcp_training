@@ -400,4 +400,62 @@ class TrainingService:
                 task_info['status'] = 'cancelled'
                 task_info['error'] = 'Service shutdown'
         
-        logger.info("Training service shutdown complete") 
+        logger.info("Training service shutdown complete")
+    
+    async def delete_training_job(self, training_id: str) -> bool:
+        """Delete a training job and its associated data.
+        
+        Args:
+            training_id: Training job ID to delete
+            
+        Returns:
+            True if job was deleted successfully, False otherwise
+        """
+        try:
+            logger.info(f"Attempting to delete training job: {training_id}")
+            
+            # Check if job exists in memory
+            if training_id in self.training_tasks:
+                task = self.training_tasks[training_id]
+                
+                # Don't allow deletion of running jobs
+                if task['status'] == 'running':
+                    logger.warning(f"Cannot delete running training job: {training_id}")
+                    return False
+                
+                # Remove from memory
+                del self.training_tasks[training_id]
+                logger.info(f"Removed training job from memory: {training_id}")
+            
+            # Check if job exists in registry (completed jobs)
+            try:
+                models = self.model_registry.list_models()
+                for model in models:
+                    version = model['version']
+                    metadata = self.model_registry.get_model(version)
+                    if metadata:
+                        # Check both model_info.training_id and training_info.training_id
+                        model_info_tid = getattr(metadata.model_info, 'training_id', None)
+                        training_info_tid = getattr(metadata.training_info, 'training_id', None)
+                        
+                        if model_info_tid == training_id or training_info_tid == training_id:
+                            # Delete the model from registry
+                            success = self.model_registry.delete_model(version)
+                            if success:
+                                logger.info(f"Deleted completed training job from registry: {training_id}")
+                                return True
+                            else:
+                                logger.error(f"Failed to delete model from registry: {version}")
+                                return False
+                
+                # If we get here, the job wasn't found in registry
+                logger.info(f"Training job not found in registry: {training_id}")
+                return True  # Consider it a success if not found
+                
+            except Exception as e:
+                logger.error(f"Error checking registry for training job {training_id}: {e}")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Error deleting training job {training_id}: {e}")
+            return False 
