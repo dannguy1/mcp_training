@@ -16,14 +16,16 @@ class TrainingManager {
         this.filteredJobs = [];
         this.currentJobId = null;
         this.updateInterval = null;
+        this.lastRefreshTime = null;
         this.init();
     }
     
     init() {
         console.log('TrainingManager init called');
         this.setupEventListeners();
+        this.setupRefreshButton();
         this.loadTrainingJobs();
-        this.startAutoRefresh();
+        // Auto-refresh disabled for training optimization
     }
     
     setupEventListeners() {
@@ -701,16 +703,49 @@ class TrainingManager {
     }
     
     startAutoRefresh() {
-        // Refresh every 10 seconds for active jobs
-        this.updateInterval = setInterval(() => {
-            this.loadTrainingJobs();
-        }, 10000);
+        // Disable auto-refresh completely - rely on WebSocket push updates and manual refresh
+        // This eliminates wasteful polling and reduces system load during training
+        console.log('Auto-refresh disabled for training optimization');
     }
     
     stopAutoRefresh() {
+        // No auto-refresh to stop
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
+        }
+    }
+    
+    // Manual refresh method for active training jobs
+    async refreshActiveJobs() {
+        const activeJobs = this.jobs.filter(job => 
+            job.status === 'running' || job.status === 'pending'
+        );
+        
+        if (activeJobs.length > 0) {
+            console.log(`Manual refresh for ${activeJobs.length} active jobs`);
+            await this.loadTrainingJobs();
+        }
+    }
+    
+    // Add refresh button functionality
+    setupRefreshButton() {
+        const refreshBtn = document.getElementById('refreshJobsBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                refreshBtn.disabled = true;
+                refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i>';
+                
+                try {
+                    await this.loadTrainingJobs();
+                    utils.showSuccess('Training jobs refreshed');
+                } catch (error) {
+                    utils.showError('Failed to refresh training jobs', error);
+                } finally {
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+                }
+            });
         }
     }
     

@@ -15,10 +15,11 @@ class MCPTrainingApp {
         this.setActiveNavigation();
         this.initTooltips();
         this.initPopovers();
-        this.loadPageData();
         this.setupWebSocket();
         this.startAutoRefresh();
         this.setupPageUnloadDetection();
+        this.setupGlobalErrorHandling();
+        this.loadPageData();
     }
     
     setupEventListeners() {
@@ -342,15 +343,34 @@ class MCPTrainingApp {
             
             this.websocket = new WebSocket(wsUrl);
             
+            // Set connection timeout
+            this.connectionTimeout = setTimeout(() => {
+                if (this.websocket && this.websocket.readyState === WebSocket.CONNECTING) {
+                    console.warn('WebSocket connection timeout');
+                    this.websocket.close();
+                }
+            }, 10000); // 10 second timeout
+            
             this.websocket.onopen = () => {
                 console.log('WebSocket connected');
-                // Clear any connection error indicators
+                clearTimeout(this.connectionTimeout);
+                this.reconnectAttempts = 0;
                 this.clearConnectionError();
+                
+                // Send a ping to verify connection is working
+                this.sendPing();
             };
             
             this.websocket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    
+                    // Handle ping/pong for connection health
+                    if (data.type === 'pong') {
+                        this.lastPong = Date.now();
+                        return;
+                    }
+                    
                     this.handleWebSocketMessage(data);
                 } catch (error) {
                     console.error('Failed to parse WebSocket message:', error);
@@ -359,36 +379,69 @@ class MCPTrainingApp {
             
             this.websocket.onerror = (error) => {
                 console.error('WebSocket error:', error);
+                clearTimeout(this.connectionTimeout);
                 this.showConnectionError();
             };
             
             this.websocket.onclose = (event) => {
                 console.log('WebSocket disconnected', event.code, event.reason);
+                clearTimeout(this.connectionTimeout);
                 
                 // Don't show loading state for normal closures or during page unload
                 if (event.code !== 1000 && event.code !== 1001 && !this.isPageUnloading) {
                     this.showConnectionError();
                 }
                 
-                // Attempt to reconnect after 10 seconds (increased from 5)
+                // Implement exponential backoff for reconnection
+                const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+                this.reconnectAttempts++;
+                
                 setTimeout(() => {
-                    if (!this.isPageUnloading) {
+                    if (!this.isPageUnloading && this.reconnectAttempts < 5) {
+                        console.log(`Attempting WebSocket reconnection (attempt ${this.reconnectAttempts})`);
                         this.setupWebSocket();
+                    } else if (this.reconnectAttempts >= 5) {
+                        console.error('Max WebSocket reconnection attempts reached');
+                        this.showConnectionError('Connection failed after multiple attempts. Please refresh the page.');
                     }
-                }, 10000);
+                }, delay);
             };
         } catch (error) {
             console.error('Failed to setup WebSocket:', error);
+            this.showConnectionError();
         }
     }
     
-    showConnectionError() {
+    sendPing() {
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            try {
+                this.websocket.send(JSON.stringify({ type: 'ping' }));
+                
+                // Check if we get a pong response within 5 seconds
+                setTimeout(() => {
+                    if (this.lastPong && (Date.now() - this.lastPong) > 5000) {
+                        console.warn('WebSocket ping timeout, reconnecting...');
+                        this.websocket.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                console.error('Failed to send ping:', error);
+            }
+        }
+    }
+    
+    showConnectionError(message = 'Connection lost, reconnecting...') {
         // Show a subtle connection indicator instead of full loading overlay
         const indicator = document.getElementById('connectionIndicator');
         if (indicator) {
             indicator.style.display = 'block';
             indicator.className = 'connection-indicator connection-error';
-            indicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Connection lost, reconnecting...';
+            indicator.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+        }
+        
+        // Also show a toast notification
+        if (typeof utils !== 'undefined') {
+            utils.showWarning(message);
         }
     }
     
@@ -450,10 +503,16 @@ class MCPTrainingApp {
     }
     
     startAutoRefresh() {
-        // Refresh data every 60 seconds (increased from 30 to reduce loading states)
-        this.autoRefreshInterval = setInterval(() => {
-            this.loadPageData();
-        }, 60000);
+        // Disable auto-refresh by default for training-focused system
+        // Only enable if explicitly requested by user
+        const autoRefreshEnabled = localStorage.getItem('autoRefreshEnabled') === 'true';
+        
+        if (autoRefreshEnabled) {
+            // Very conservative refresh - only every 5 minutes
+            this.autoRefreshInterval = setInterval(() => {
+                this.loadPageData();
+            }, 300000); // 5 minutes
+        }
     }
     
     stopAutoRefresh() {
@@ -474,6 +533,56 @@ class MCPTrainingApp {
                 this.websocket.close(1000, 'Page unload');
             }
         });
+        
+        // Add keyboard shortcuts for emergency recovery
+        document.addEventListener('keydown', (event) => {
+            // Ctrl+Shift+R to force hide all loading states
+            if (event.ctrlKey && event.shiftKey && event.key === 'R') {
+                event.preventDefault();
+                console.log('Emergency recovery: Force hiding all loading states');
+                if (typeof utils !== 'undefined') {
+                    utils.forceHideAllLoading();
+                }
+                this.clearConnectionError();
+                utils.showInfo('All loading states cleared. UI should be responsive now.');
+            }
+            
+            // Ctrl+Shift+C to reconnect WebSocket
+            if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+                event.preventDefault();
+                console.log('Emergency recovery: Reconnecting WebSocket');
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+                this.reconnectAttempts = 0;
+                this.setupWebSocket();
+                utils.showInfo('WebSocket reconnection initiated.');
+            }
+            
+            // Ctrl+Shift+F to toggle auto-refresh (for debugging)
+            if (event.ctrlKey && event.shiftKey && event.key === 'F') {
+                event.preventDefault();
+                const current = localStorage.getItem('autoRefreshEnabled') === 'true';
+                localStorage.setItem('autoRefreshEnabled', (!current).toString());
+                if (current) {
+                    this.stopAutoRefresh();
+                    utils.showInfo('Auto-refresh disabled');
+                } else {
+                    this.startAutoRefresh();
+                    utils.showInfo('Auto-refresh enabled (5 min intervals)');
+                }
+            }
+        });
+        
+        // Remove periodic health checks to reduce overhead
+        // Only check WebSocket health when needed
+    }
+    
+    checkUIIHealth() {
+        // Simplified health check - only check WebSocket if it exists
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.sendPing();
+        }
     }
     
     // Action methods
@@ -484,6 +593,87 @@ class MCPTrainingApp {
     
     showUploadModal() {
         const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+        modal.show();
+    }
+    
+    showHelpModal() {
+        // Create help modal if it doesn't exist
+        let helpModal = document.getElementById('helpModal');
+        if (!helpModal) {
+            helpModal = document.createElement('div');
+            helpModal.id = 'helpModal';
+            helpModal.className = 'modal fade';
+            helpModal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-question-circle me-2"></i>
+                                Help & Keyboard Shortcuts
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <tbody>
+                                                <tr>
+                                                    <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd></td>
+                                                    <td>Force hide all loading states</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></td>
+                                                    <td>Reconnect WebSocket</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-tools me-2"></i>Troubleshooting</h6>
+                                    <div class="alert alert-info">
+                                        <strong>UI appears greyed out?</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li>Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> to force clear</li>
+                                            <li>Check the connection indicator in the top-right</li>
+                                            <li>Try refreshing the page</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6><i class="bi bi-info-circle me-2"></i>Connection Status</h6>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-circle-fill text-success"></i>
+                                            <span>Connected</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-circle-fill text-warning"></i>
+                                            <span>Reconnecting</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-circle-fill text-danger"></i>
+                                            <span>Disconnected</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(helpModal);
+        }
+        
+        const modal = new bootstrap.Modal(helpModal);
         modal.show();
     }
     
@@ -603,6 +793,41 @@ class MCPTrainingApp {
     viewLogDetails(logId) {
         // Implement log details view
         utils.showInfo(`Viewing details for log ${logId}`);
+    }
+    
+    setupGlobalErrorHandling() {
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            event.preventDefault();
+            
+            // Hide any loading states
+            if (typeof utils !== 'undefined') {
+                utils.hideLoading();
+            }
+            
+            // Show error notification
+            if (typeof utils !== 'undefined') {
+                utils.showError('An unexpected error occurred. Please try again.');
+            }
+        });
+        
+        // Handle global JavaScript errors
+        window.addEventListener('error', (event) => {
+            console.error('Global error:', event.error);
+            
+            // Hide any loading states
+            if (typeof utils !== 'undefined') {
+                utils.hideLoading();
+            }
+            
+            // Don't show error for network errors (they're handled elsewhere)
+            if (!event.message.includes('fetch') && !event.message.includes('NetworkError')) {
+                if (typeof utils !== 'undefined') {
+                    utils.showError('A JavaScript error occurred. Please refresh the page.');
+                }
+            }
+        });
     }
 }
 

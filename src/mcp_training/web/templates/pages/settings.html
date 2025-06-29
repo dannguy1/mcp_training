@@ -121,6 +121,25 @@
                                     </label>
                                 </div>
                             </div>
+                            
+                            <div class="mb-3">
+                                <label for="performanceMode" class="form-label">Performance Mode</label>
+                                <select class="form-select" id="performanceMode">
+                                    <option value="training">Training Optimized (Minimal UI updates)</option>
+                                    <option value="balanced">Balanced (Moderate updates)</option>
+                                    <option value="responsive">Responsive (Frequent updates)</option>
+                                </select>
+                                <div class="form-text">Choose performance mode based on your system resources and training needs.</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="liveUpdates">
+                                    <label class="form-check-label" for="liveUpdates">
+                                        Enable live log updates (uses more resources)
+                                    </label>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>

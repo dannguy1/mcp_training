@@ -75,6 +75,10 @@ class TrainingService:
                                 config_overrides: Optional[Dict[str, Any]]):
         """Run training task in background."""
         try:
+            # Create progress callback for 5% interval updates
+            async def progress_callback(progress: int, step: str):
+                await self._update_progress(training_id, progress, step)
+            
             # Step 1: Validate export data
             await self._update_progress(training_id, 5, 'Validating export data')
             validation_results = await self.training_pipeline.validate_export_for_training(export_files[0])
@@ -84,13 +88,14 @@ class TrainingService:
                                           error='; '.join(validation_results['errors']))
                 return
             
-            # Step 2: Run comprehensive training pipeline
+            # Step 2: Run comprehensive training pipeline with progress callback
             await self._update_progress(training_id, 10, 'Starting training pipeline')
             training_result = await self.training_pipeline.run_training_pipeline(
                 export_file_paths=export_files,
                 model_type=model_type,
                 model_name=model_name,
-                training_id=training_id
+                training_id=training_id,
+                progress_callback=progress_callback
             )
             
             # Step 3: Complete
@@ -214,7 +219,7 @@ class TrainingService:
             try:
                 from ..api.routes.websocket import broadcast_training_update
                 
-                # Create async task to broadcast
+                # Create async task to broadcast with timeout
                 async def broadcast():
                     try:
                         status = 'running'
@@ -223,21 +228,26 @@ class TrainingService:
                         elif result:
                             status = 'completed'
                         
-                        await broadcast_training_update(
-                            job_id=training_id,
-                            progress=progress,
-                            status=status,
-                            step=step,
-                            error=error,
-                            result=result
+                        await asyncio.wait_for(
+                            broadcast_training_update(
+                                job_id=training_id,
+                                progress=progress,
+                                status=status,
+                                step=step,
+                                error=error,
+                                result=result
+                            ),
+                            timeout=5.0  # 5 second timeout
                         )
+                    except asyncio.TimeoutError:
+                        logger.warning(f"WebSocket broadcast timeout for training {training_id}")
                     except Exception as e:
                         logger.error(f"Failed to broadcast training update: {e}")
                 
                 # Run in event loop if available
                 try:
                     loop = asyncio.get_running_loop()
-                    # Schedule the broadcast task
+                    # Schedule the broadcast task without blocking
                     loop.create_task(broadcast())
                 except RuntimeError:
                     # No running event loop, try to get the current one
@@ -246,9 +256,12 @@ class TrainingService:
                         if loop.is_running():
                             loop.create_task(broadcast())
                         else:
-                            # Create a new task in the event loop
+                            # Create a new task in the event loop with timeout
                             future = asyncio.run_coroutine_threadsafe(broadcast(), loop)
-                            future.result(timeout=5)  # Wait up to 5 seconds
+                            try:
+                                future.result(timeout=5)  # Wait up to 5 seconds
+                            except Exception as e:
+                                logger.warning(f"WebSocket broadcast failed: {e}")
                     except Exception as e:
                         logger.warning(f"Could not broadcast training update: {e}")
                         

@@ -36,14 +36,17 @@ class TrainingPipeline:
                                   export_file_paths: List[str],
                                   model_type: str = "isolation_forest",
                                   model_name: Optional[str] = None,
-                                  training_id: Optional[str] = None) -> Dict[str, Any]:
+                                  training_id: Optional[str] = None,
+                                  progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """Run complete training pipeline with multiple export files."""
         pipeline_start = datetime.now()
         
         try:
             logger.info(f"Starting training pipeline with {len(export_file_paths)} export files")
             
-            # Step 1: Load and validate export data from all files
+            # Step 1: Load and validate export data from all files (5-15%)
+            if progress_callback:
+                await progress_callback(5, 'Loading and validating export data')
             logger.info("Loading and validating export data from all files")
             all_exported_data = []
             total_log_entries = 0
@@ -53,61 +56,110 @@ class TrainingPipeline:
                 exported_data = await self._load_exported_data(export_file_path)
                 all_exported_data.append(exported_data)
                 total_log_entries += len(exported_data['data'])
+                
+                # Progress update for each file (5-15%)
+                if progress_callback:
+                    file_progress = 5 + (i + 1) * 10 / len(export_file_paths)
+                    await progress_callback(file_progress, f'Processed {i+1}/{len(export_file_paths)} export files')
             
-            # Step 2: Combine data from all files
+            # Step 2: Combine data from all files (15-20%)
+            if progress_callback:
+                await progress_callback(15, 'Combining export data')
             logger.info(f"Combining data from {len(export_file_paths)} files ({total_log_entries} total log entries)")
             combined_data = self._combine_export_data(all_exported_data)
             
-            # Step 3: Extract features
+            # Step 3: Extract features (20-35%)
+            if progress_callback:
+                await progress_callback(20, 'Extracting features from data')
             logger.info("Extracting features from combined data")
             features_df = self.trainer.feature_extractor.extract_features(combined_data['data'])
             features_df = self.trainer._handle_missing_values(features_df)
             
-            # Step 4: Prepare training data
+            if progress_callback:
+                await progress_callback(35, 'Features extracted successfully')
+            
+            # Step 4: Prepare training data (35-45%)
+            if progress_callback:
+                await progress_callback(35, 'Preparing training data')
             logger.info("Preparing training data")
             X = self.trainer.scaler.fit_transform(features_df)
             # For unsupervised learning, we don't have labels
             y = None
             
-            # Step 5: Train model
+            if progress_callback:
+                await progress_callback(45, 'Training data prepared')
+            
+            # Step 5: Train model (45-75%)
+            if progress_callback:
+                await progress_callback(45, 'Training model')
             logger.info("Training model")
             training_start = datetime.now()
             self.trainer.model = self.trainer._create_model()
             self.trainer.model.fit(X)
             training_duration = (datetime.now() - training_start).total_seconds()
             
-            # Step 6: Evaluate model
+            if progress_callback:
+                await progress_callback(75, 'Model training completed')
+            
+            # Step 6: Evaluate model (75-85%)
+            if progress_callback:
+                await progress_callback(75, 'Evaluating model performance')
             logger.info("Evaluating model")
             evaluation_results = self.evaluator.evaluate_model(self.trainer.model, X, y)
             
-            # Step 7: Check if model meets requirements
+            if progress_callback:
+                await progress_callback(85, 'Model evaluation completed')
+            
+            # Step 7: Check if model meets requirements (85-90%)
+            if progress_callback:
+                await progress_callback(85, 'Checking model requirements')
             logger.info("Checking model requirements")
             if not self._check_model_requirements(evaluation_results):
                 raise ValueError("Model does not meet performance requirements")
             
-            # Step 8: Save model and metadata
+            if progress_callback:
+                await progress_callback(90, 'Model requirements validated')
+            
+            # Step 8: Save model and metadata (90-95%)
+            if progress_callback:
+                await progress_callback(90, 'Saving model and metadata')
             logger.info("Saving model and metadata")
             model_path = await self._save_model_with_metadata(
                 self.trainer.model, X, evaluation_results, training_duration, 
                 export_file_paths, model_type, features_df.columns.tolist(), training_id
             )
             
-            # Step 9: Update model registry
+            if progress_callback:
+                await progress_callback(95, 'Model saved successfully')
+            
+            # Step 9: Update model registry (95-98%)
+            if progress_callback:
+                await progress_callback(95, 'Updating model registry')
             logger.info("Updating model registry")
             await self._update_model_registry(model_path, evaluation_results)
             
-            # Step 10: Generate training report
+            if progress_callback:
+                await progress_callback(98, 'Registry updated')
+            
+            # Step 10: Generate training report (98-100%)
+            if progress_callback:
+                await progress_callback(98, 'Generating training report')
             pipeline_duration = (datetime.now() - pipeline_start).total_seconds()
             report = self._generate_training_report(
                 model_path, evaluation_results, pipeline_duration, features_df.columns.tolist(),
                 export_file_paths, total_log_entries
             )
             
+            if progress_callback:
+                await progress_callback(100, 'Training pipeline completed successfully')
+            
             logger.info("Training pipeline completed successfully")
             return report
             
         except Exception as e:
             logger.error(f"Training pipeline failed: {e}")
+            if progress_callback:
+                await progress_callback(0, f'Training failed: {str(e)}')
             raise
     
     async def _load_exported_data(self, export_file_path: str) -> Dict[str, Any]:

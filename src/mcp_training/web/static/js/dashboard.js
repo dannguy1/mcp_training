@@ -622,10 +622,10 @@ class DashboardManager {
     }
     
     startAutoRefresh() {
-        // Refresh dashboard every 30 seconds
+        // Refresh dashboard every 2 minutes - very conservative for training system
         this.updateInterval = setInterval(() => {
             this.updateDashboard();
-        }, 30000);
+        }, 120000); // 2 minutes
     }
     
     stopAutoRefresh() {

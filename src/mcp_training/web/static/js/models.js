@@ -612,10 +612,10 @@ class ModelsManager {
     }
     
     startAutoRefresh() {
-        // Refresh every 30 seconds
+        // Refresh every 2 minutes - models don't change frequently
         this.updateInterval = setInterval(() => {
             this.loadModels();
-        }, 30000);
+        }, 120000); // 2 minutes
     }
     
     stopAutoRefresh() {

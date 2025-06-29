@@ -15,20 +15,52 @@ class SettingsManager {
     }
     
     setupEventListeners() {
-        // Settings tabs - updated for horizontal tabs
-        const settingsTabs = document.querySelectorAll('[data-bs-toggle="tab"]');
-        settingsTabs.forEach(tab => {
-            tab.addEventListener('shown.bs.tab', (e) => {
-                this.handleTabChange(e.target.getAttribute('data-bs-target'));
-            });
+        // General form submission
+        document.getElementById('generalSettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveGeneralSettings();
         });
         
-        // Form validation
-        const forms = document.querySelectorAll('form[id$="SettingsForm"]');
-        forms.forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveSettings();
+        // Training form submission
+        document.getElementById('trainingSettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveTrainingSettings();
+        });
+        
+        // Storage form submission
+        document.getElementById('storageSettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveStorageSettings();
+        });
+        
+        // Logging form submission
+        document.getElementById('loggingSettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveLoggingSettings();
+        });
+        
+        // Security form submission
+        document.getElementById('securitySettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveSecuritySettings();
+        });
+        
+        // Performance mode change
+        document.getElementById('performanceMode')?.addEventListener('change', () => {
+            this.applyPerformanceSettings();
+        });
+        
+        // Live updates toggle
+        document.getElementById('liveUpdates')?.addEventListener('change', () => {
+            this.applyPerformanceSettings();
+        });
+        
+        // Tab switching
+        const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
+        tabButtons.forEach(button => {
+            button.addEventListener('shown.bs.tab', (e) => {
+                const target = e.target.getAttribute('data-bs-target');
+                this.loadTabData(target);
             });
         });
         
@@ -121,6 +153,10 @@ class SettingsManager {
         this.setFormValue('autoRefresh', this.settings.general?.auto_refresh !== false);
         this.setFormValue('notifications', this.settings.general?.notifications !== false);
         
+        // Performance Settings
+        this.setFormValue('performanceMode', this.settings.general?.performance_mode || 'training');
+        this.setFormValue('liveUpdates', this.settings.general?.live_updates === true);
+        
         // Training Settings
         this.setFormValue('maxConcurrentJobs', this.settings.training?.max_concurrent_jobs || 3);
         this.setFormValue('defaultMaxIterations', this.settings.training?.default_max_iterations || 1000);
@@ -139,25 +175,30 @@ class SettingsManager {
         // Logging Settings
         this.setFormValue('logLevel', this.settings.logging?.level || 'INFO');
         this.setFormValue('logFormat', this.settings.logging?.format || 'structured');
-        this.setFormValue('logFile', this.settings.logging?.file || 'logs/mcp_training.log');
-        this.setFormValue('maxLogSizeMB', this.settings.logging?.max_size_mb || 100);
-        this.setFormValue('logToConsole', this.settings.logging?.console !== false);
-        this.setFormValue('logToFile', this.settings.logging?.file_enabled !== false);
+        this.setFormValue('logRotation', this.settings.logging?.rotation || 'daily');
+        this.setFormValue('logRetention', this.settings.logging?.retention || 30);
+        
+        // Monitoring Settings
+        this.setFormValue('enableMonitoring', this.settings.monitoring?.enabled !== false);
+        this.setFormValue('prometheusPort', this.settings.monitoring?.prometheus_port || 9091);
+        this.setFormValue('healthCheckInterval', this.settings.monitoring?.health_check_interval || 30);
+        this.setFormValue('performanceMonitoring', this.settings.monitoring?.performance_monitoring !== false);
         
         // Security Settings
-        this.setFormValue('authEnabled', this.settings.security?.auth_enabled ? 'true' : 'false');
-        this.setFormValue('apiKey', this.settings.security?.api_key || '');
-        this.setFormValue('corsOrigins', this.settings.security?.cors_origins || '');
-        this.setFormValue('rateLimit', this.settings.security?.rate_limit || 100);
-        this.setFormValue('httpsOnly', this.settings.security?.https_only || false);
-        this.setFormValue('secureHeaders', this.settings.security?.secure_headers !== false);
+        this.setFormValue('apiKeyRequired', this.settings.security?.api_key_required === true);
+        this.setFormValue('allowedIPs', this.settings.security?.allowed_ips?.join(', ') || '');
+        this.setFormValue('rateLimiting', this.settings.security?.rate_limiting !== false);
+        this.setFormValue('sslEnabled', this.settings.security?.ssl?.enabled === true);
+        this.setFormValue('sslCertFile', this.settings.security?.ssl?.cert_file || '');
+        this.setFormValue('sslKeyFile', this.settings.security?.ssl?.key_file || '');
         
-        // Advanced Settings
-        this.setFormValue('debugMode', this.settings.advanced?.debug_mode ? 'true' : 'false');
-        this.setFormValue('performanceMonitoring', this.settings.advanced?.performance_monitoring !== false ? 'true' : 'false');
-        this.setFormValue('websocketEnabled', this.settings.advanced?.websocket_enabled !== false ? 'true' : 'false');
-        this.setFormValue('autoBackup', this.settings.advanced?.auto_backup ? 'true' : 'false');
-        this.setFormValue('customConfig', this.settings.advanced?.custom_config || '{"custom_setting": "value"}');
+        // Integration Settings
+        this.setFormValue('mcpServiceEnabled', this.settings.integration?.mcp_service?.enabled !== false);
+        this.setFormValue('mcpServiceUrl', this.settings.integration?.mcp_service?.api_url || 'http://localhost:8000');
+        this.setFormValue('mcpServiceKey', this.settings.integration?.mcp_service?.api_key || '');
+        this.setFormValue('autoDeploy', this.settings.integration?.deployment?.auto_deploy === true);
+        this.setFormValue('deploymentDir', this.settings.integration?.deployment?.deployment_dir || '../mcp_service/models');
+        this.setFormValue('backupExisting', this.settings.integration?.deployment?.backup_existing !== false);
     }
     
     setFormValue(elementId, value) {
@@ -201,7 +242,9 @@ class SettingsManager {
                 timezone: this.getFormValue('timezone'),
                 date_format: this.getFormValue('dateFormat'),
                 auto_refresh: this.getFormValue('autoRefresh'),
-                notifications: this.getFormValue('notifications')
+                notifications: this.getFormValue('notifications'),
+                performance_mode: this.getFormValue('performanceMode'),
+                live_updates: this.getFormValue('liveUpdates')
             },
             training: {
                 max_concurrent_jobs: parseInt(this.getFormValue('maxConcurrentJobs')),
@@ -221,25 +264,40 @@ class SettingsManager {
             logging: {
                 level: this.getFormValue('logLevel'),
                 format: this.getFormValue('logFormat'),
-                file: this.getFormValue('logFile'),
-                max_size_mb: parseInt(this.getFormValue('maxLogSizeMB')),
-                console: this.getFormValue('logToConsole'),
-                file_enabled: this.getFormValue('logToFile')
+                rotation: this.getFormValue('logRotation'),
+                retention: parseInt(this.getFormValue('logRetention')),
+                enable_monitoring: this.getFormValue('enableMonitoring'),
+                prometheus_port: parseInt(this.getFormValue('prometheusPort')),
+                health_check_interval: parseInt(this.getFormValue('healthCheckInterval')),
+                performance_monitoring: this.getFormValue('performanceMonitoring')
             },
             security: {
-                auth_enabled: this.getFormValue('authEnabled') === 'true',
-                api_key: this.getFormValue('apiKey'),
-                cors_origins: this.getFormValue('corsOrigins'),
-                rate_limit: parseInt(this.getFormValue('rateLimit')),
-                https_only: this.getFormValue('httpsOnly'),
-                secure_headers: this.getFormValue('secureHeaders')
+                api_key_required: this.getFormValue('apiKeyRequired'),
+                allowed_ips: this.getFormValue('allowedIPs').split(',').map(ip => ip.trim()),
+                rate_limiting: this.getFormValue('rateLimiting'),
+                ssl: {
+                    enabled: this.getFormValue('sslEnabled'),
+                    cert_file: this.getFormValue('sslCertFile'),
+                    key_file: this.getFormValue('sslKeyFile')
+                }
             },
-            advanced: {
-                debug_mode: this.getFormValue('debugMode') === 'true',
-                performance_monitoring: this.getFormValue('performanceMonitoring') === 'true',
-                websocket_enabled: this.getFormValue('websocketEnabled') === 'true',
-                auto_backup: this.getFormValue('autoBackup') === 'true',
-                custom_config: this.parseJsonValue(this.getFormValue('customConfig'))
+            monitoring: {
+                enabled: this.getFormValue('enableMonitoring'),
+                prometheus_port: parseInt(this.getFormValue('prometheusPort')),
+                health_check_interval: parseInt(this.getFormValue('healthCheckInterval')),
+                performance_monitoring: this.getFormValue('performanceMonitoring')
+            },
+            integration: {
+                mcp_service: {
+                    enabled: this.getFormValue('mcpServiceEnabled'),
+                    api_url: this.getFormValue('mcpServiceUrl'),
+                    api_key: this.getFormValue('mcpServiceKey')
+                },
+                deployment: {
+                    auto_deploy: this.getFormValue('autoDeploy'),
+                    deployment_dir: this.getFormValue('deploymentDir'),
+                    backup_existing: this.getFormValue('backupExisting')
+                }
             }
         };
         
@@ -452,7 +510,9 @@ class SettingsManager {
                 timezone: "UTC",
                 date_format: "YYYY-MM-DD",
                 auto_refresh: true,
-                notifications: true
+                notifications: true,
+                performance_mode: "training",
+                live_updates: false
             },
             training: {
                 max_concurrent_jobs: 3,
@@ -472,27 +532,72 @@ class SettingsManager {
             logging: {
                 level: "INFO",
                 format: "structured",
-                file: "logs/mcp_training.log",
-                max_size_mb: 100,
-                console: true,
-                file_enabled: true
+                rotation: "daily",
+                retention: 30,
+                enable_monitoring: false,
+                prometheus_port: 9091,
+                health_check_interval: 30,
+                performance_monitoring: false
             },
             security: {
-                auth_enabled: false,
-                api_key: "",
-                cors_origins: "http://localhost:3000,https://example.com",
-                rate_limit: 100,
-                https_only: false,
-                secure_headers: true
+                api_key_required: false,
+                allowed_ips: ["http://localhost:3000", "https://example.com"],
+                rate_limiting: false,
+                ssl: {
+                    enabled: false,
+                    cert_file: "",
+                    key_file: ""
+                }
             },
-            advanced: {
-                debug_mode: false,
-                performance_monitoring: true,
-                websocket_enabled: true,
-                auto_backup: false,
-                custom_config: {"custom_setting": "value"}
+            monitoring: {
+                enabled: false,
+                prometheus_port: 9091,
+                health_check_interval: 30,
+                performance_monitoring: false
+            },
+            integration: {
+                mcp_service: {
+                    enabled: false,
+                    api_url: "http://localhost:8000",
+                    api_key: ""
+                },
+                deployment: {
+                    auto_deploy: false,
+                    deployment_dir: "../mcp_service/models",
+                    backup_existing: false
+                }
             }
         };
+    }
+    
+    applyPerformanceSettings() {
+        const performanceMode = this.getFormValue('performanceMode');
+        const liveUpdates = this.getFormValue('liveUpdates');
+        
+        // Store settings in localStorage for immediate effect
+        localStorage.setItem('performanceMode', performanceMode);
+        localStorage.setItem('liveUpdatesEnabled', liveUpdates.toString());
+        
+        // Apply performance mode settings
+        switch (performanceMode) {
+            case 'training':
+                // Minimal updates - best for training
+                localStorage.setItem('autoRefreshEnabled', 'false');
+                break;
+            case 'balanced':
+                // Moderate updates
+                localStorage.setItem('autoRefreshEnabled', 'true');
+                break;
+            case 'responsive':
+                // Frequent updates
+                localStorage.setItem('autoRefreshEnabled', 'true');
+                break;
+        }
+        
+        // Show notification about performance mode change
+        if (typeof utils !== 'undefined') {
+            utils.showInfo(`Performance mode set to: ${performanceMode}. Changes will take effect on page refresh.`);
+        }
     }
 }
 

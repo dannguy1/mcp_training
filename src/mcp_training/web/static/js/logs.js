@@ -459,10 +459,15 @@ class LogsManager {
     }
     
     startLiveUpdates() {
-        // Refresh logs every 5 seconds in live mode
-        this.updateInterval = setInterval(() => {
-            this.loadLogs();
-        }, 5000);
+        // Only start live updates if explicitly enabled by user
+        const liveUpdatesEnabled = localStorage.getItem('liveUpdatesEnabled') === 'true';
+        
+        if (liveUpdatesEnabled) {
+            // Refresh logs every 30 seconds in live mode (much less aggressive)
+            this.updateInterval = setInterval(() => {
+                this.loadLogs();
+            }, 30000); // 30 seconds instead of 5
+        }
     }
     
     stopLiveUpdates() {

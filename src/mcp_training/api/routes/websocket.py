@@ -20,12 +20,23 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.connection_types: Dict[WebSocket, str] = {}  # Track connection types (general, logs)
+        self.connection_health: Dict[WebSocket, Dict[str, Any]] = {}  # Track connection health
+        self.health_check_interval = 30  # Check health every 30 seconds
+        
+        # Start health monitoring
+        asyncio.create_task(self._health_monitor())
     
     async def connect(self, websocket: WebSocket, connection_type: str = "general"):
         """Accept a new WebSocket connection."""
         await websocket.accept()
         self.active_connections.append(websocket)
         self.connection_types[websocket] = connection_type
+        self.connection_health[websocket] = {
+            'connected_at': asyncio.get_event_loop().time(),
+            'last_activity': asyncio.get_event_loop().time(),
+            'message_count': 0,
+            'error_count': 0
+        }
         logger.info(f"WebSocket connected: {connection_type} (total: {len(self.active_connections)})")
     
     def disconnect(self, websocket: WebSocket):
@@ -33,14 +44,22 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             connection_type = self.connection_types.pop(websocket, "unknown")
+            self.connection_health.pop(websocket, None)
             logger.info(f"WebSocket disconnected: {connection_type} (total: {len(self.active_connections)})")
     
     async def send_personal_message(self, message: str, websocket: WebSocket):
         """Send a message to a specific WebSocket connection."""
         try:
             await websocket.send_text(message)
+            # Update health metrics
+            if websocket in self.connection_health:
+                self.connection_health[websocket]['last_activity'] = asyncio.get_event_loop().time()
+                self.connection_health[websocket]['message_count'] += 1
         except Exception as e:
             logger.error(f"Failed to send personal message: {e}")
+            # Update error count
+            if websocket in self.connection_health:
+                self.connection_health[websocket]['error_count'] += 1
             self.disconnect(websocket)
     
     async def broadcast(self, message: str, connection_type: str = "general"):
@@ -51,8 +70,15 @@ class ConnectionManager:
             if self.connection_types.get(connection) == connection_type:
                 try:
                     await connection.send_text(message)
+                    # Update health metrics
+                    if connection in self.connection_health:
+                        self.connection_health[connection]['last_activity'] = asyncio.get_event_loop().time()
+                        self.connection_health[connection]['message_count'] += 1
                 except Exception as e:
                     logger.error(f"Failed to broadcast message: {e}")
+                    # Update error count
+                    if connection in self.connection_health:
+                        self.connection_health[connection]['error_count'] += 1
                     disconnected.append(connection)
         
         # Remove dead connections
@@ -66,13 +92,51 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
+                # Update health metrics
+                if connection in self.connection_health:
+                    self.connection_health[connection]['last_activity'] = asyncio.get_event_loop().time()
+                    self.connection_health[connection]['message_count'] += 1
             except Exception as e:
                 logger.error(f"Failed to broadcast to all: {e}")
+                # Update error count
+                if connection in self.connection_health:
+                    self.connection_health[connection]['error_count'] += 1
                 disconnected.append(connection)
         
         # Remove dead connections
         for connection in disconnected:
             self.disconnect(connection)
+    
+    async def _health_monitor(self):
+        """Monitor connection health and clean up dead connections."""
+        while True:
+            try:
+                current_time = asyncio.get_event_loop().time()
+                dead_connections = []
+                
+                for connection, health in self.connection_health.items():
+                    # Check if connection has been inactive for too long (5 minutes)
+                    if current_time - health['last_activity'] > 300:
+                        logger.warning(f"Connection inactive for too long, marking as dead")
+                        dead_connections.append(connection)
+                    
+                    # Check if connection has too many errors (more than 10)
+                    elif health['error_count'] > 10:
+                        logger.warning(f"Connection has too many errors, marking as dead")
+                        dead_connections.append(connection)
+                
+                # Remove dead connections
+                for connection in dead_connections:
+                    self.disconnect(connection)
+                
+                if dead_connections:
+                    logger.info(f"Cleaned up {len(dead_connections)} dead connections")
+                
+            except Exception as e:
+                logger.error(f"Error in health monitor: {e}")
+            
+            # Wait before next health check
+            await asyncio.sleep(self.health_check_interval)
 
 
 # Global connection manager instance
@@ -110,9 +174,37 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 message = json.loads(data)
                 logger.debug(f"Received WebSocket message: {message}")
-                # Handle any client messages if needed
+                
+                # Handle ping/pong for connection health
+                if message.get('type') == 'ping':
+                    await manager.send_personal_message(
+                        json.dumps({'type': 'pong', 'timestamp': message.get('timestamp')}),
+                        websocket
+                    )
+                    continue
+                
+                # Handle any other client messages if needed
+                if message.get('type') == 'subscribe':
+                    # Handle subscription requests
+                    logger.info(f"Client subscribed to: {message.get('channel', 'general')}")
+                    
             except json.JSONDecodeError:
                 logger.warning(f"Invalid JSON received: {data}")
+            except Exception as e:
+                logger.error(f"Error handling WebSocket message: {e}")
+                # Send error response to client
+                try:
+                    await manager.send_personal_message(
+                        json.dumps({
+                            'type': 'error',
+                            'message': 'Failed to process message',
+                            'error': str(e)
+                        }),
+                        websocket
+                    )
+                except Exception as send_error:
+                    logger.error(f"Failed to send error response: {send_error}")
+                    
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
