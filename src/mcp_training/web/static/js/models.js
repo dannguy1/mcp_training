@@ -90,7 +90,8 @@ class ModelsManager {
     async loadModels() {
         try {
             utils.showLoading();
-            const models = await utils.apiCall('/api/models');
+            const modelsResponse = await utils.apiCall('/api/models');
+            const models = modelsResponse.models || modelsResponse;
             this.models = models;
             this.filteredModels = [...models];
             this.updateModelsTable();

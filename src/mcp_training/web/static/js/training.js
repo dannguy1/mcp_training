@@ -142,7 +142,8 @@ class TrainingManager {
     async loadTrainingJobs() {
         try {
             utils.showLoading();
-            const jobs = await utils.apiCall('/api/training/jobs');
+            const jobsResponse = await utils.apiCall('/api/training/jobs');
+            const jobs = jobsResponse.trainings || jobsResponse;
             this.jobs = jobs;
             this.filteredJobs = [...jobs];
             this.updateTrainingTable();

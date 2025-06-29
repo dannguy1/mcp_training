@@ -230,11 +230,15 @@ class DashboardManager {
     
     async updateDashboard() {
         try {
-            const [status, trainingJobs, models] = await Promise.all([
+            const [status, trainingJobsResponse, modelsResponse] = await Promise.all([
                 utils.apiCall('/api/health/status'),
                 utils.apiCall('/api/training/jobs'),
                 utils.apiCall('/api/models')
             ]);
+            
+            // Extract the trainings array from the new response structure
+            const trainingJobs = trainingJobsResponse.trainings || trainingJobsResponse;
+            const models = modelsResponse.models || modelsResponse;
             
             this.updateStatusCards(status);
             this.updateTrainingChart(trainingJobs);

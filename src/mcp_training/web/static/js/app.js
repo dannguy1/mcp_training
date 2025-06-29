@@ -130,11 +130,15 @@ class MCPTrainingApp {
     
     async loadDashboardData() {
         try {
-            const [status, trainingJobs, models] = await Promise.all([
+            const [status, trainingJobsResponse, modelsResponse] = await Promise.all([
                 utils.apiCall('/api/health/status'),
                 utils.apiCall('/api/training/jobs'),
                 utils.apiCall('/api/models')
             ]);
+            
+            // Extract the trainings array from the new response structure
+            const trainingJobs = trainingJobsResponse.trainings || trainingJobsResponse;
+            const models = modelsResponse.models || modelsResponse;
             
             this.updateDashboard(status, trainingJobs, models);
         } catch (error) {
@@ -144,7 +148,8 @@ class MCPTrainingApp {
     
     async loadTrainingData() {
         try {
-            const trainingJobs = await utils.apiCall('/api/training/jobs');
+            const trainingJobsResponse = await utils.apiCall('/api/training/jobs');
+            const trainingJobs = trainingJobsResponse.trainings || trainingJobsResponse;
             this.updateTrainingTable(trainingJobs);
         } catch (error) {
             utils.showError('Failed to load training data', error);
@@ -153,7 +158,8 @@ class MCPTrainingApp {
     
     async loadModelsData() {
         try {
-            const models = await utils.apiCall('/api/models');
+            const modelsResponse = await utils.apiCall('/api/models');
+            const models = modelsResponse.models || modelsResponse;
             this.updateModelsTable(models);
         } catch (error) {
             utils.showError('Failed to load models data', error);
