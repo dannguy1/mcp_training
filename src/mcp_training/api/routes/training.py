@@ -414,20 +414,44 @@ async def get_training_jobs(
         total = len(jobs)
         jobs = jobs[offset:offset+limit]
         
-        # Convert to TrainingStatus format
+        # Convert to TrainingStatus format while preserving original property names
         training_list = []
         for job in jobs:
+            # Create a job object that matches what the frontend expects
+            job_data = {
+                'id': job.get('training_id', job.get('id', '')),
+                'name': job.get('model_name', job.get('name', f"Training Job {job.get('training_id', job.get('id', ''))}")),
+                'status': job.get('status', 'unknown'),
+                'progress': job.get('progress', 0.0),
+                'step': job.get('step', job.get('current_step', '')),
+                'message': job.get('error', '') or job.get('step', '') or job.get('message', ''),
+                'created_at': job.get('start_time', job.get('created_at', datetime.now())),
+                'updated_at': job.get('updated_at', job.get('start_time', datetime.now())),
+                'result': job.get('result'),
+                'export_file': job.get('export_files', [None])[0] if isinstance(job.get('export_files'), list) else job.get('export_file'),
+                'export_files': job.get('export_files', []),
+                'model_type': job.get('model_type'),
+                'description': job.get('description'),
+                'evaluation_results': job.get('result', {}).get('evaluation_results') if job.get('result') else None,
+                'comprehensive_stats': job.get('comprehensive_stats')
+            }
+            
             training_status = TrainingStatus(
-                training_id=job.get('id', ''),
-                status=job.get('status', 'unknown'),
-                progress=job.get('progress', 0.0),
-                current_step=job.get('step', ''),
-                message=job.get('error', '') or job.get('step', ''),
-                created_at=job.get('start_time', datetime.now()),
-                updated_at=job.get('start_time', datetime.now()),
-                result=job.get('result')
+                training_id=job_data['id'],
+                status=job_data['status'],
+                progress=job_data['progress'],
+                current_step=job_data['step'],
+                message=job_data['message'],
+                created_at=job_data['created_at'],
+                updated_at=job_data['updated_at'],
+                result=job_data['result']
             )
-            training_list.append(training_status)
+            
+            # Add the original properties to the TrainingStatus object
+            training_status_dict = training_status.dict()
+            training_status_dict.update(job_data)
+            
+            training_list.append(training_status_dict)
         
         return TrainingList(
             trainings=training_list,
