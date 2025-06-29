@@ -249,6 +249,10 @@ cleanup() {
     rm -f "$PROJECT_ROOT/logs/mcp-training-backend.pid"
     rm -f "$PROJECT_ROOT/logs/mcp-training-frontend.pid"
     
+    # Run comprehensive cleanup of generated data
+    print_info "Running comprehensive data cleanup..."
+    "$SCRIPT_DIR/cleanup.sh" --confirm
+    
     print_success "Cleanup complete!"
 }
 
@@ -265,7 +269,7 @@ show_help() {
     echo "  status    Show status of all services"
     echo "  logs      Show service logs"
     echo "  setup     Setup development environment"
-    echo "  cleanup   Clean up development environment"
+    echo "  cleanup   Clean up development environment (stops services and removes generated data)"
     echo "  help      Show this help message"
     echo ""
     echo "Options:"
