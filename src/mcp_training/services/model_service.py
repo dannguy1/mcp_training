@@ -277,7 +277,7 @@ class ModelService:
                     "training_samples": metadata.training_info.training_samples,
                     "feature_names": metadata.training_info.feature_names,
                     "feature_count": len(metadata.training_info.feature_names),
-                    "export_file_size": metadata.training_info.export_file_size,
+                    "export_files_size": metadata.training_info.export_files_size,
                     "training_duration": metadata.training_info.training_duration,
                     "model_parameters": metadata.training_info.model_parameters
                 },

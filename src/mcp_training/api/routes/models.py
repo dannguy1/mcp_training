@@ -168,6 +168,132 @@ async def get_models(
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
 
 
+@router.get("/latest", response_model=ModelInfo)
+async def get_latest_model(
+    model_service: ModelService = Depends(get_model_service)
+):
+    """Get the latest trained model.
+    
+    Args:
+        model_service: Model service
+        
+    Returns:
+        Latest model information
+    """
+    try:
+        model_metadata = model_service.get_latest_model()
+        
+        if not model_metadata:
+            raise HTTPException(status_code=404, detail="No models found")
+        
+        # Convert ModelMetadata to ModelInfo format
+        # Map deployment status to frontend expected status
+        status = model_metadata.deployment_info.status
+        if status == 'available':
+            status = 'ready'  # Frontend expects 'ready' for available models
+        elif status == 'deployed':
+            status = 'deployed'  # Keep as is
+        else:
+            status = 'ready'  # Default to ready for other statuses
+        
+        # Try to get file size from metadata, else from model.joblib
+        file_size = model_metadata.training_info.export_files_size
+        if not file_size:
+            # Try to get from model.joblib
+            model_dir = Path(model_metadata.model_info.version)
+            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
+            if model_path.exists():
+                file_size = model_path.stat().st_size
+            else:
+                file_size = 0
+        
+        model_info = ModelInfo(
+            version=model_metadata.model_info.version,
+            id=model_metadata.model_info.version,
+            name=f"Model {model_metadata.model_info.version}",
+            type=model_metadata.model_info.model_type,
+            status=status,
+            created_at=model_metadata.model_info.created_at,
+            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
+            deployed_at=model_metadata.deployment_info.deployed_at,
+            deployed_by=model_metadata.deployment_info.deployed_by,
+            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
+            file_size=file_size,
+            size=file_size
+        )
+        
+        return model_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting latest model: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get latest model: {str(e)}")
+
+
+@router.get("/deployed", response_model=ModelInfo)
+async def get_deployed_model(
+    model_service: ModelService = Depends(get_model_service)
+):
+    """Get the currently deployed model.
+    
+    Args:
+        model_service: Model service
+        
+    Returns:
+        Deployed model information
+    """
+    try:
+        model_metadata = model_service.get_deployed_model()
+        
+        if not model_metadata:
+            raise HTTPException(status_code=404, detail="No deployed model found")
+        
+        # Convert ModelMetadata to ModelInfo format
+        # Map deployment status to frontend expected status
+        status = model_metadata.deployment_info.status
+        if status == 'available':
+            status = 'ready'  # Frontend expects 'ready' for available models
+        elif status == 'deployed':
+            status = 'deployed'  # Keep as is
+        else:
+            status = 'ready'  # Default to ready for other statuses
+        
+        # Try to get file size from metadata, else from model.joblib
+        file_size = model_metadata.training_info.export_files_size
+        if not file_size:
+            # Try to get from model.joblib
+            model_dir = Path(model_metadata.model_info.version)
+            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
+            if model_path.exists():
+                file_size = model_path.stat().st_size
+            else:
+                file_size = 0
+        
+        model_info = ModelInfo(
+            version=model_metadata.model_info.version,
+            id=model_metadata.model_info.version,
+            name=f"Model {model_metadata.model_info.version}",
+            type=model_metadata.model_info.model_type,
+            status=status,
+            created_at=model_metadata.model_info.created_at,
+            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
+            deployed_at=model_metadata.deployment_info.deployed_at,
+            deployed_by=model_metadata.deployment_info.deployed_by,
+            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
+            file_size=file_size,
+            size=file_size
+        )
+        
+        return model_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting deployed model: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get deployed model: {str(e)}")
+
+
 @router.get("/{version}", response_model=ModelInfo)
 async def get_model(
     version: str,
@@ -199,7 +325,7 @@ async def get_model(
             status = 'ready'  # Default to ready for other statuses
         
         # Try to get file size from metadata, else from model.joblib
-        file_size = model_metadata.training_info.export_file_size
+        file_size = model_metadata.training_info.export_files_size
         if not file_size:
             # Try to get from model.joblib
             model_dir = Path(model_metadata.model_info.version)
@@ -291,132 +417,6 @@ async def deploy_model(
     except Exception as e:
         logger.error(f"Error deploying model {version}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to deploy model: {str(e)}")
-
-
-@router.get("/latest", response_model=ModelInfo)
-async def get_latest_model(
-    model_service: ModelService = Depends(get_model_service)
-):
-    """Get the latest trained model.
-    
-    Args:
-        model_service: Model service
-        
-    Returns:
-        Latest model information
-    """
-    try:
-        model_metadata = model_service.get_latest_model()
-        
-        if not model_metadata:
-            raise HTTPException(status_code=404, detail="No models found")
-        
-        # Convert ModelMetadata to ModelInfo format
-        # Map deployment status to frontend expected status
-        status = model_metadata.deployment_info.status
-        if status == 'available':
-            status = 'ready'  # Frontend expects 'ready' for available models
-        elif status == 'deployed':
-            status = 'deployed'  # Keep as is
-        else:
-            status = 'ready'  # Default to ready for other statuses
-        
-        # Try to get file size from metadata, else from model.joblib
-        file_size = model_metadata.training_info.export_file_size
-        if not file_size:
-            # Try to get from model.joblib
-            model_dir = Path(model_metadata.model_info.version)
-            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
-            if model_path.exists():
-                file_size = model_path.stat().st_size
-            else:
-                file_size = 0
-        
-        model_info = ModelInfo(
-            version=model_metadata.model_info.version,
-            id=model_metadata.model_info.version,
-            name=f"Model {model_metadata.model_info.version}",
-            type=model_metadata.model_info.model_type,
-            status=status,
-            created_at=model_metadata.model_info.created_at,
-            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
-            deployed_at=model_metadata.deployment_info.deployed_at,
-            deployed_by=model_metadata.deployment_info.deployed_by,
-            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
-            file_size=file_size,
-            size=file_size
-        )
-        
-        return model_info
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting latest model: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get latest model: {str(e)}")
-
-
-@router.get("/deployed", response_model=ModelInfo)
-async def get_deployed_model(
-    model_service: ModelService = Depends(get_model_service)
-):
-    """Get the currently deployed model.
-    
-    Args:
-        model_service: Model service
-        
-    Returns:
-        Deployed model information
-    """
-    try:
-        model_metadata = model_service.get_deployed_model()
-        
-        if not model_metadata:
-            raise HTTPException(status_code=404, detail="No deployed model found")
-        
-        # Convert ModelMetadata to ModelInfo format
-        # Map deployment status to frontend expected status
-        status = model_metadata.deployment_info.status
-        if status == 'available':
-            status = 'ready'  # Frontend expects 'ready' for available models
-        elif status == 'deployed':
-            status = 'deployed'  # Keep as is
-        else:
-            status = 'ready'  # Default to ready for other statuses
-        
-        # Try to get file size from metadata, else from model.joblib
-        file_size = model_metadata.training_info.export_file_size
-        if not file_size:
-            # Try to get from model.joblib
-            model_dir = Path(model_metadata.model_info.version)
-            model_path = Path('models') / model_metadata.model_info.version / 'model.joblib'
-            if model_path.exists():
-                file_size = model_path.stat().st_size
-            else:
-                file_size = 0
-        
-        model_info = ModelInfo(
-            version=model_metadata.model_info.version,
-            id=model_metadata.model_info.version,
-            name=f"Model {model_metadata.model_info.version}",
-            type=model_metadata.model_info.model_type,
-            status=status,
-            created_at=model_metadata.model_info.created_at,
-            updated_at=model_metadata.model_info.created_at,  # Use created_at as updated_at for now
-            deployed_at=model_metadata.deployment_info.deployed_at,
-            deployed_by=model_metadata.deployment_info.deployed_by,
-            metrics=model_metadata.evaluation_info.basic_metrics if model_metadata.evaluation_info.basic_metrics else None,
-            file_size=file_size,
-            size=file_size
-        )
-        
-        return model_info
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting deployed model: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get deployed model: {str(e)}")
 
 
 @router.post("/{version}/predict", response_model=PredictionResponse)

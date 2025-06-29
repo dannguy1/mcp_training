@@ -405,7 +405,7 @@ class TrainingService:
                                     'features': len(metadata.training_info.feature_names) if hasattr(metadata.training_info, 'feature_names') else 0,
                                     'feature_names': metadata.training_info.feature_names if hasattr(metadata.training_info, 'feature_names') else [],
                                     'duration_seconds': metadata.training_info.training_duration if hasattr(metadata.training_info, 'training_duration') else 0,
-                                    'export_size_mb': round(metadata.training_info.export_file_size / 1024 / 1024, 2) if hasattr(metadata.training_info, 'export_file_size') else 0,
+                                    'export_size_mb': round(metadata.training_info.export_files_size / 1024 / 1024, 2) if hasattr(metadata.training_info, 'export_files_size') else 0,
                                     'model_parameters': metadata.training_info.model_parameters if hasattr(metadata.training_info, 'model_parameters') else {}
                                 },
                                 'evaluation_summary': self._get_evaluation_summary_from_registry(version),
