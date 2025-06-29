@@ -172,6 +172,9 @@ class TrainingManager {
         }
         
         tableBody.innerHTML = this.filteredJobs.map(job => {
+            // Get the job ID - try multiple possible field names
+            const jobId = job.id || job.training_id || job.job_id || 'unknown';
+            
             // Determine evaluation status
             let evalStatus = '';
             let evalStatusClass = 'secondary';
@@ -204,11 +207,11 @@ class TrainingManager {
             }
             
             return `
-                <tr data-job-id="${job.id}">
-                    <td>${job.id}</td>
+                <tr data-job-id="${jobId}">
+                    <td>${jobId}</td>
                     <td>
                         <div>
-                            <strong>${job.model_name || 'Unnamed Job'}</strong>
+                            <strong>${job.model_name || job.name || 'Unnamed Job'}</strong>
                             ${job.description ? `<br><small class="text-muted">${job.description.substring(0, 50)}${job.description.length > 50 ? '...' : ''}</small>` : ''}
                         </div>
                     </td>
@@ -238,17 +241,17 @@ class TrainingManager {
                     </td>
                     <td class="table-actions">
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-info" onclick="trainingManager.viewJobDetails('${job.id}')" 
+                            <button class="btn btn-outline-info" onclick="trainingManager.viewJobDetails('${jobId}')" 
                                     title="View Details">
                                 <i class="bi bi-eye"></i>
                             </button>
                             ${job.status === 'running' ? `
-                                <button class="btn btn-outline-warning" onclick="trainingManager.cancelJob('${job.id}')" 
+                                <button class="btn btn-outline-warning" onclick="trainingManager.cancelJob('${jobId}')" 
                                         title="Cancel Job">
                                     <i class="bi bi-stop"></i>
                                 </button>
                             ` : ''}
-                            <button class="btn btn-outline-danger" onclick="trainingManager.deleteJob('${job.id}')" 
+                            <button class="btn btn-outline-danger" onclick="trainingManager.deleteJob('${jobId}')" 
                                     title="Delete Job">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -282,9 +285,13 @@ class TrainingManager {
         const statusFilter = document.getElementById('statusFilter')?.value || '';
         
         this.filteredJobs = this.jobs.filter(job => {
+            // Get job ID safely
+            const jobId = job.id || job.training_id || job.job_id || '';
+            
             const matchesSearch = !searchTerm || 
-                job.id.toString().includes(searchTerm) ||
+                jobId.toString().includes(searchTerm) ||
                 (job.name && job.name.toLowerCase().includes(searchTerm)) ||
+                (job.model_name && job.model_name.toLowerCase().includes(searchTerm)) ||
                 (job.export_file && job.export_file.toLowerCase().includes(searchTerm));
             
             const matchesStatus = !statusFilter || job.status === statusFilter;
@@ -416,14 +423,18 @@ class TrainingManager {
         const modal = new bootstrap.Modal(document.getElementById('jobDetailsModal'));
         const content = document.getElementById('jobDetailsContent');
         
+        // Get job ID safely
+        const jobId = job.id || job.training_id || job.job_id || 'unknown';
+        const jobName = job.name || job.model_name || 'Unnamed Job';
+        
         // Base job information
         let jobDetailsHtml = `
             <div class="row">
                 <div class="col-md-6">
                     <h6>Job Information</h6>
                     <table class="table table-sm">
-                        <tr><td>ID:</td><td>${job.id}</td></tr>
-                        <tr><td>Name:</td><td>${job.name || 'Unnamed'}</td></tr>
+                        <tr><td>ID:</td><td>${jobId}</td></tr>
+                        <tr><td>Name:</td><td>${jobName}</td></tr>
                         <tr><td>Status:</td><td><span class="badge bg-${utils.getStatusColor(job.status)}">${job.status}</span></td></tr>
                         <tr><td>Created:</td><td>${utils.formatDateTime(job.created_at)}</td></tr>
                         <tr><td>Updated:</td><td>${utils.formatDateTime(job.updated_at)}</td></tr>
@@ -756,14 +767,17 @@ class TrainingManager {
     }
     
     exportJobs() {
-        const data = this.filteredJobs.map(job => ({
-            id: job.id,
-            name: job.name,
-            status: job.status,
-            export_file: job.export_file,
-            created_at: job.created_at,
-            progress: job.progress
-        }));
+        const data = this.filteredJobs.map(job => {
+            const jobId = job.id || job.training_id || job.job_id || 'unknown';
+            return {
+                id: jobId,
+                name: job.name || job.model_name || 'Unnamed Job',
+                status: job.status,
+                export_file: job.export_file,
+                created_at: job.created_at,
+                progress: job.progress
+            };
+        });
         
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = window.URL.createObjectURL(blob);
