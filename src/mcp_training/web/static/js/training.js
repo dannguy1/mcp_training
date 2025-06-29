@@ -487,19 +487,19 @@ class TrainingManager {
                                     <div class="col-md-6">
                                         <h6 class="text-primary">Training Information</h6>
                                         <table class="table table-sm">
-                                            <tr><td>Training Samples:</td><td><strong>${trainingInfo.samples.toLocaleString()}</strong></td></tr>
-                                            <tr><td>Features:</td><td><strong>${trainingInfo.features}</strong></td></tr>
-                                            <tr><td>Training Duration:</td><td><strong>${trainingInfo.duration_seconds.toFixed(2)}s</strong></td></tr>
-                                            <tr><td>Export File Size:</td><td><strong>${trainingInfo.export_size_mb} MB</strong></td></tr>
-                                            <tr><td>Model Type:</td><td><strong>${job.model_type}</strong></td></tr>
+                                            <tr><td>Training Samples:</td><td><strong>${trainingInfo.samples ? trainingInfo.samples.toLocaleString() : 'N/A'}</strong></td></tr>
+                                            <tr><td>Features:</td><td><strong>${trainingInfo.features || 'N/A'}</strong></td></tr>
+                                            <tr><td>Training Duration:</td><td><strong>${trainingInfo.duration_seconds ? trainingInfo.duration_seconds.toFixed(2) + 's' : 'N/A'}</strong></td></tr>
+                                            <tr><td>Export File Size:</td><td><strong>${trainingInfo.export_size_mb ? trainingInfo.export_size_mb + ' MB' : 'N/A'}</strong></td></tr>
+                                            <tr><td>Model Type:</td><td><strong>${job.model_type || 'N/A'}</strong></td></tr>
                                         </table>
                                     </div>
                                     <div class="col-md-6">
                                         <h6 class="text-primary">Model Parameters</h6>
                                         <table class="table table-sm">
-                                            ${Object.entries(trainingInfo.model_parameters).map(([param, value]) => `
+                                            ${trainingInfo.model_parameters ? Object.entries(trainingInfo.model_parameters).map(([param, value]) => `
                                                 <tr><td>${param}:</td><td><strong>${value}</strong></td></tr>
-                                            `).join('')}
+                                            `).join('') : '<tr><td colspan="2">No parameters available</td></tr>'}
                                         </table>
                                     </div>
                                 </div>
@@ -521,17 +521,17 @@ class TrainingManager {
                                         <div class="col-md-6">
                                             <h6 class="text-primary">Score Statistics</h6>
                                             <table class="table table-sm">
-                                                <tr><td>Score Mean:</td><td><strong>${performanceMetrics.score_mean.toFixed(4)}</strong></td></tr>
-                                                <tr><td>Score Std:</td><td><strong>${performanceMetrics.score_std.toFixed(4)}</strong></td></tr>
-                                                <tr><td>Score Min:</td><td><strong>${performanceMetrics.score_min.toFixed(4)}</strong></td></tr>
-                                                <tr><td>Score Max:</td><td><strong>${performanceMetrics.score_max.toFixed(4)}</strong></td></tr>
+                                                <tr><td>Score Mean:</td><td><strong>${performanceMetrics.score_mean ? performanceMetrics.score_mean.toFixed(4) : 'N/A'}</strong></td></tr>
+                                                <tr><td>Score Std:</td><td><strong>${performanceMetrics.score_std ? performanceMetrics.score_std.toFixed(4) : 'N/A'}</strong></td></tr>
+                                                <tr><td>Score Min:</td><td><strong>${performanceMetrics.score_min ? performanceMetrics.score_min.toFixed(4) : 'N/A'}</strong></td></tr>
+                                                <tr><td>Score Max:</td><td><strong>${performanceMetrics.score_max ? performanceMetrics.score_max.toFixed(4) : 'N/A'}</strong></td></tr>
                                             </table>
                                         </div>
                                         <div class="col-md-6">
                                             <h6 class="text-primary">Anomaly Detection</h6>
                                             <table class="table table-sm">
-                                                <tr><td>Anomaly Ratio:</td><td><strong>${(performanceMetrics.anomaly_ratio * 100).toFixed(2)}%</strong></td></tr>
-                                                <tr><td>Threshold Value:</td><td><strong>${performanceMetrics.threshold_value.toFixed(4)}</strong></td></tr>
+                                                <tr><td>Anomaly Ratio:</td><td><strong>${performanceMetrics.anomaly_ratio ? (performanceMetrics.anomaly_ratio * 100).toFixed(2) + '%' : 'N/A'}</strong></td></tr>
+                                                <tr><td>Threshold Value:</td><td><strong>${performanceMetrics.threshold_value ? performanceMetrics.threshold_value.toFixed(4) : 'N/A'}</strong></td></tr>
                                             </table>
                                         </div>
                                     </div>
@@ -543,7 +543,7 @@ class TrainingManager {
             }
             
             // Add evaluation summary
-            if (evaluationSummary) {
+            if (evaluationSummary && Object.keys(evaluationSummary).length > 0) {
                 jobDetailsHtml += `
                     <div class="row mt-3">
                         <div class="col-12">
@@ -554,15 +554,15 @@ class TrainingManager {
                                         <div class="col-md-6">
                                             <h6 class="text-primary">Overall Performance</h6>
                                             <table class="table table-sm">
-                                                <tr><td>Threshold Pass Rate:</td><td><strong>${(evaluationSummary.overall_performance.threshold_pass_rate * 100).toFixed(0)}%</strong></td></tr>
-                                                <tr><td>Passed Thresholds:</td><td><strong>${evaluationSummary.overall_performance.passed_thresholds}/${evaluationSummary.overall_performance.total_thresholds}</strong></td></tr>
+                                                <tr><td>Threshold Pass Rate:</td><td><strong>${evaluationSummary.overall_performance && evaluationSummary.overall_performance.threshold_pass_rate ? (evaluationSummary.overall_performance.threshold_pass_rate * 100).toFixed(0) + '%' : 'N/A'}</strong></td></tr>
+                                                <tr><td>Passed Thresholds:</td><td><strong>${evaluationSummary.overall_performance ? `${evaluationSummary.overall_performance.passed_thresholds || 0}/${evaluationSummary.overall_performance.total_thresholds || 0}` : 'N/A'}</strong></td></tr>
                                             </table>
                                         </div>
                                         <div class="col-md-6">
                                             <h6 class="text-primary">Best/Worst Metrics</h6>
                                             <table class="table table-sm">
-                                                <tr><td>Best Metric:</td><td><strong>${evaluationSummary.best_metrics.best_metric[0]} (${evaluationSummary.best_metrics.best_metric[1].toFixed(4)})</strong></td></tr>
-                                                <tr><td>Worst Metric:</td><td><strong>${evaluationSummary.best_metrics.worst_metric[0]} (${evaluationSummary.best_metrics.worst_metric[1].toFixed(4)})</strong></td></tr>
+                                                <tr><td>Best Metric:</td><td><strong>${evaluationSummary.best_metrics && evaluationSummary.best_metrics.best_metric ? `${evaluationSummary.best_metrics.best_metric[0]} (${evaluationSummary.best_metrics.best_metric[1] ? evaluationSummary.best_metrics.best_metric[1].toFixed(4) : 'N/A'})` : 'N/A'}</strong></td></tr>
+                                                <tr><td>Worst Metric:</td><td><strong>${evaluationSummary.best_metrics && evaluationSummary.best_metrics.worst_metric ? `${evaluationSummary.best_metrics.worst_metric[0]} (${evaluationSummary.best_metrics.worst_metric[1] ? evaluationSummary.best_metrics.worst_metric[1].toFixed(4) : 'N/A'})` : 'N/A'}</strong></td></tr>
                                             </table>
                                         </div>
                                     </div>
