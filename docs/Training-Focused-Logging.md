@@ -305,4 +305,135 @@ To migrate from full logging to training-only logging:
 
 The training-focused logging system provides a clean, efficient logging solution specifically designed for training systems. By filtering out non-training events, it reduces noise, improves performance, and makes training logs much more useful for monitoring and debugging training operations.
 
-This approach ensures that training systems can focus on what matters most: the training process itself, without being overwhelmed by irrelevant system events. 
+This approach ensures that training systems can focus on what matters most: the training process itself, without being overwhelmed by irrelevant system events.
+
+## Log Management Features
+
+### 1. Clear Logs
+Users can easily clear all log files when past training activities become irrelevant:
+
+- **Clear All Logs Button**: Located in Settings > Logging section
+- **Confirmation Dialog**: Prevents accidental log clearing
+- **Safe Clearing**: Truncates files instead of deleting to maintain file handles
+- **Progress Feedback**: Shows clearing progress and results
+
+### 2. Download Logs
+Export log information for analysis or backup:
+
+- **Log Summary Download**: Downloads JSON summary of all log files
+- **File Information**: Includes filename, size, line count, and modification date
+- **Timestamped Files**: Downloads include date in filename for organization
+
+### 3. View Logs Information
+Quick overview of log files without clearing:
+
+- **Log Files Table**: Shows all log files with size and modification dates
+- **Total Statistics**: Displays total file count and size
+- **Modal Interface**: Clean, organized view of log information
+
+### 4. Log Management UI
+The Settings > Logging section includes:
+
+```
+┌─ Log Management ──────────────────────────────┐
+│ [🗑️ Clear All Logs] [📥 Download Logs] [👁️ View Logs] │
+│ Clear logs when past training activities      │
+│ become irrelevant. This will permanently      │
+│ delete all log files.                         │
+└───────────────────────────────────────────────┘
+```
+
+## Configuration Options
+
+### Training-Only Logging (Default: Enabled)
+- **Enabled**: Only training-related events are logged
+- **Disabled**: All application events are logged (not recommended for training systems)
+
+### Log Level
+- **DEBUG**: Detailed debugging information
+- **INFO**: General information (default)
+- **WARNING**: Warning messages only
+- **ERROR**: Error messages only
+
+### Log Format
+- **Structured**: JSON format with metadata (default)
+- **Simple**: Plain text format
+
+### Log Retention
+- **Default**: 30 days
+- **Range**: 1-365 days
+- **Automatic cleanup**: Old log files are automatically removed
+
+## Benefits
+
+### 1. Reduced Noise
+- **90% reduction** in log volume
+- **Focused information** on training activities
+- **Easier troubleshooting** of training issues
+
+### 2. Better Performance
+- **Reduced I/O overhead** from excessive logging
+- **Smaller log files** for faster processing
+- **Less disk space** usage
+
+### 3. Improved User Experience
+- **Clean, relevant logs** for training monitoring
+- **Easy log management** with clear/export options
+- **Quick access** to training-specific information
+
+### 4. System Efficiency
+- **Training-focused monitoring** without system noise
+- **Efficient log rotation** and retention
+- **Optimized for training workloads**
+
+## Usage Examples
+
+### Enable Training-Only Logging
+```bash
+# Via environment variable
+export TRAINING_ONLY_LOGGING=true
+
+# Via configuration file
+{
+  "logging": {
+    "training_only": true
+  }
+}
+```
+
+### Clear Logs via API
+```bash
+curl -X DELETE http://localhost:8000/api/logs/clear
+```
+
+### Get Logs Information
+```bash
+curl http://localhost:8000/api/logs/info
+```
+
+### Download Logs Summary
+```bash
+curl http://localhost:8000/api/logs/download
+```
+
+## Best Practices
+
+### 1. Keep Training-Only Logging Enabled
+- **Default setting** is optimal for training systems
+- **Disable only** for debugging non-training issues
+- **Re-enable** after debugging is complete
+
+### 2. Regular Log Management
+- **Clear logs** when starting new training sessions
+- **Download logs** before clearing for backup
+- **Monitor log size** to prevent disk space issues
+
+### 3. Appropriate Log Levels
+- **INFO** for normal training operations
+- **DEBUG** for troubleshooting training issues
+- **WARNING/ERROR** for production monitoring
+
+### 4. Log Retention
+- **30 days** is typically sufficient for training systems
+- **Adjust based** on training frequency and storage capacity
+- **Consider backup** before reducing retention periods 

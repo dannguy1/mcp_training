@@ -45,9 +45,28 @@ class SettingsManager {
             this.saveSecuritySettings();
         });
         
+        // Advanced form submission
+        document.getElementById('advancedSettingsForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveAdvancedSettings();
+        });
+        
+        // Log management buttons
+        document.getElementById('clearLogsBtn')?.addEventListener('click', () => {
+            this.clearLogs();
+        });
+        
+        document.getElementById('downloadLogsBtn')?.addEventListener('click', () => {
+            this.downloadLogs();
+        });
+        
+        document.getElementById('viewLogsBtn')?.addEventListener('click', () => {
+            this.viewLogs();
+        });
+        
         // Performance mode change
-        document.getElementById('performanceMode')?.addEventListener('change', () => {
-            this.applyPerformanceSettings();
+        document.getElementById('performanceMode')?.addEventListener('change', (e) => {
+            this.updatePerformanceMode(e.target.value);
         });
         
         // Live updates toggle
@@ -601,6 +620,182 @@ class SettingsManager {
         if (typeof utils !== 'undefined') {
             utils.showInfo(`Performance mode set to: ${performanceMode}. Changes will take effect on page refresh.`);
         }
+    }
+    
+    async clearLogs() {
+        if (!confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const clearBtn = document.getElementById('clearLogsBtn');
+            const originalText = clearBtn.innerHTML;
+            clearBtn.disabled = true;
+            clearBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Clearing...';
+            
+            const response = await fetch('/api/logs/clear', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                utils.showSuccess(`Successfully cleared ${result.cleared_files} log files`);
+            } else {
+                utils.showError('Failed to clear logs', result.detail || result.message);
+            }
+        } catch (error) {
+            utils.showError('Failed to clear logs', error);
+        } finally {
+            const clearBtn = document.getElementById('clearLogsBtn');
+            clearBtn.disabled = false;
+            clearBtn.innerHTML = '<i class="bi bi-trash me-2"></i>Clear All Logs';
+        }
+    }
+    
+    async downloadLogs() {
+        try {
+            const downloadBtn = document.getElementById('downloadLogsBtn');
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Preparing...';
+            
+            const response = await fetch('/api/logs/download');
+            const result = await response.json();
+            
+            if (response.ok) {
+                // Create a summary of logs for download
+                const logsSummary = {
+                    timestamp: new Date().toISOString(),
+                    total_files: result.logs.length,
+                    files: result.logs.map(log => ({
+                        filename: log.filename,
+                        size: log.size,
+                        lines: log.lines,
+                        last_modified: log.last_modified
+                    }))
+                };
+                
+                // Create and download the file
+                const blob = new Blob([JSON.stringify(logsSummary, null, 2)], {
+                    type: 'application/json'
+                });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logs-summary-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                utils.showSuccess(`Downloaded logs summary for ${result.logs.length} files`);
+            } else {
+                utils.showError('Failed to download logs', result.detail || result.message);
+            }
+        } catch (error) {
+            utils.showError('Failed to download logs', error);
+        } finally {
+            const downloadBtn = document.getElementById('downloadLogsBtn');
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = '<i class="bi bi-download me-2"></i>Download Logs';
+        }
+    }
+    
+    async viewLogs() {
+        try {
+            const viewBtn = document.getElementById('viewLogsBtn');
+            const originalText = viewBtn.innerHTML;
+            viewBtn.disabled = true;
+            viewBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Loading...';
+            
+            const response = await fetch('/api/logs/info');
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showLogsInfoModal(result);
+            } else {
+                utils.showError('Failed to get logs info', result.detail || result.message);
+            }
+        } catch (error) {
+            utils.showError('Failed to get logs info', error);
+        } finally {
+            const viewBtn = document.getElementById('viewLogsBtn');
+            viewBtn.disabled = false;
+            viewBtn.innerHTML = '<i class="bi bi-eye me-2"></i>View Logs';
+        }
+    }
+    
+    showLogsInfoModal(logsInfo) {
+        // Create modal content
+        const modalContent = `
+            <div class="modal-header">
+                <h5 class="modal-title">Log Files Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Total Files:</strong> ${logsInfo.total_files}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Total Size:</strong> ${logsInfo.total_size_mb} MB
+                    </div>
+                </div>
+                
+                ${logsInfo.files.length > 0 ? `
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Size</th>
+                                    <th>Last Modified</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${logsInfo.files.map(file => `
+                                    <tr>
+                                        <td>${file.filename}</td>
+                                        <td>${file.size_mb} MB</td>
+                                        <td>${new Date(file.last_modified).toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<p class="text-muted">No log files found.</p>'}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        `;
+        
+        // Create and show modal
+        const modalId = 'logsInfoModal';
+        let modal = document.getElementById(modalId);
+        
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.id = modalId;
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        ${modalContent}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.querySelector('.modal-content').innerHTML = modalContent;
+        }
+        
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
     }
 }
 

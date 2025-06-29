@@ -323,4 +323,166 @@ async def clear_training_logs() -> Dict[str, str]:
         return {"message": "Training logs cleared successfully"}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to clear training logs: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to clear training logs: {str(e)}")
+
+
+@router.delete("/clear")
+async def clear_logs() -> Dict[str, Any]:
+    """Clear all log files.
+    
+    Returns:
+        Status of log clearing operation
+    """
+    try:
+        from ..deps import get_storage_service
+        storage_service = get_storage_service()
+        
+        # Get logs directory
+        logs_dir = Path(storage_service.logs_dir)
+        
+        if not logs_dir.exists():
+            return {
+                "status": "success",
+                "message": "No logs directory found",
+                "cleared_files": 0
+            }
+        
+        # Find all log files
+        log_files = list(logs_dir.glob("*.log"))
+        log_files.extend(list(logs_dir.glob("*.log.*")))  # Include rotated logs
+        
+        cleared_count = 0
+        
+        # Clear each log file
+        for log_file in log_files:
+            try:
+                # Truncate the file instead of deleting to maintain file handles
+                log_file.write_text("")
+                cleared_count += 1
+                logger.info(f"Cleared log file: {log_file}")
+            except Exception as e:
+                logger.error(f"Failed to clear log file {log_file}: {e}")
+        
+        return {
+            "status": "success",
+            "message": f"Cleared {cleared_count} log files",
+            "cleared_files": cleared_count,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear logs: {str(e)}")
+
+
+@router.get("/download")
+async def download_logs() -> Dict[str, Any]:
+    """Get logs for download.
+    
+    Returns:
+        Log data for download
+    """
+    try:
+        from ..deps import get_storage_service
+        storage_service = get_storage_service()
+        
+        # Get logs directory
+        logs_dir = Path(storage_service.logs_dir)
+        
+        if not logs_dir.exists():
+            return {
+                "status": "error",
+                "message": "No logs directory found",
+                "logs": []
+            }
+        
+        # Find all log files
+        log_files = list(logs_dir.glob("*.log"))
+        log_files.extend(list(logs_dir.glob("*.log.*")))
+        
+        logs_data = []
+        
+        for log_file in log_files:
+            try:
+                with open(log_file, 'r') as f:
+                    content = f.read()
+                    logs_data.append({
+                        "filename": log_file.name,
+                        "size": len(content),
+                        "lines": len(content.splitlines()),
+                        "last_modified": datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                    })
+            except Exception as e:
+                logger.error(f"Failed to read log file {log_file}: {e}")
+        
+        return {
+            "status": "success",
+            "message": f"Found {len(logs_data)} log files",
+            "logs": logs_data,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get logs for download: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")
+
+
+@router.get("/info")
+async def get_logs_info() -> Dict[str, Any]:
+    """Get information about log files.
+    
+    Returns:
+        Log files information
+    """
+    try:
+        from ..deps import get_storage_service
+        storage_service = get_storage_service()
+        
+        # Get logs directory
+        logs_dir = Path(storage_service.logs_dir)
+        
+        if not logs_dir.exists():
+            return {
+                "status": "success",
+                "message": "No logs directory found",
+                "total_files": 0,
+                "total_size": 0,
+                "files": []
+            }
+        
+        # Find all log files
+        log_files = list(logs_dir.glob("*.log"))
+        log_files.extend(list(logs_dir.glob("*.log.*")))
+        
+        total_size = 0
+        files_info = []
+        
+        for log_file in log_files:
+            try:
+                stat = log_file.stat()
+                file_size = stat.st_size
+                total_size += file_size
+                
+                files_info.append({
+                    "filename": log_file.name,
+                    "size": file_size,
+                    "size_mb": round(file_size / (1024 * 1024), 2),
+                    "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "created": datetime.fromtimestamp(stat.st_ctime).isoformat()
+                })
+            except Exception as e:
+                logger.error(f"Failed to get info for log file {log_file}: {e}")
+        
+        return {
+            "status": "success",
+            "message": f"Found {len(files_info)} log files",
+            "total_files": len(files_info),
+            "total_size": total_size,
+            "total_size_mb": round(total_size / (1024 * 1024), 2),
+            "files": files_info,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get logs info: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get logs info: {str(e)}") 
