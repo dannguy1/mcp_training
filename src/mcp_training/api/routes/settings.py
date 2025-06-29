@@ -9,7 +9,7 @@ import logging
 
 from ...core.config import get_global_config, get_config
 from ...services.storage_service import StorageService
-from ...api.deps import get_storage_service
+from ...services.deps import get_storage_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
