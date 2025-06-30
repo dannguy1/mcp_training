@@ -552,9 +552,72 @@ window.forceHideLoading = function() {
     hideLoading();
 };
 
+// Global recovery function for stuck loading states
+window.recoverFromStuckLoading = function() {
+    console.log('Recovering from stuck loading state...');
+    forceHideAllLoading();
+    
+    // Clear any disabled states
+    const disabledElements = document.querySelectorAll('button:disabled, input:disabled, select:disabled');
+    disabledElements.forEach(element => {
+        element.disabled = false;
+    });
+    
+    // Clear any modal backdrops
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => {
+        backdrop.remove();
+    });
+    
+    // Remove modal-open class from body
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+    
+    console.log('Recovery completed');
+};
+
 // Auto-hide loading overlay on page load to prevent stuck state
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         hideLoading();
     }, 1000);
+    
+    // Additional safety: Clear loading state after 5 seconds
+    setTimeout(() => {
+        if (document.getElementById('loadingOverlay')?.style.display === 'flex') {
+            console.warn('Loading overlay still visible after 5 seconds, forcing hide');
+            hideLoading();
+        }
+    }, 5000);
+});
+
+// Safety: Clear loading state on page unload
+window.addEventListener('beforeunload', function() {
+    hideLoading();
+});
+
+// Safety: Clear loading state on visibility change (user switches tabs)
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        // Check if loading overlay has been visible for too long
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay && overlay.style.display === 'flex') {
+            const timeoutId = overlay.dataset.timeoutId;
+            if (timeoutId && Date.now() - parseInt(timeoutId) > 30000) {
+                console.warn('Loading overlay stuck for too long, forcing hide');
+                hideLoading();
+            }
+        }
+    }
+});
+
+// Emergency recovery keyboard shortcut (Ctrl+Shift+R)
+document.addEventListener('keydown', function(event) {
+    if (event.ctrlKey && event.shiftKey && event.key === 'R') {
+        console.log('Emergency recovery shortcut triggered');
+        event.preventDefault();
+        recoverFromStuckLoading();
+        showInfo('Emergency recovery completed. If issues persist, please refresh the page.');
+    }
 }); 

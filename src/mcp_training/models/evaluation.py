@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 import numpy as np
 from sklearn.metrics import silhouette_score
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,35 +30,73 @@ class ModelEvaluator:
             Dictionary containing evaluation results
         """
         try:
+            logger.info(f"Starting model evaluation with {X.shape[0]} samples and {X.shape[1]} features")
+            
             # Get anomaly scores
             scores = model.score_samples(X)
+            logger.info(f"Calculated anomaly scores with range [{np.min(scores):.4f}, {np.max(scores):.4f}]")
             
             # Calculate basic metrics
             basic_metrics = self._calculate_basic_metrics(scores)
+            logger.info(f"Calculated basic metrics: {len(basic_metrics)} metrics")
             
             # Calculate score distribution
             score_distribution = self._calculate_score_distribution(scores)
+            logger.info("Calculated score distribution")
             
             # Calculate feature importance (if available)
-            feature_importance = self._calculate_feature_importance(model, X, feature_names)
+            try:
+                feature_importance = self._calculate_feature_importance(model, X, feature_names)
+                logger.info(f"Calculated feature importance for {len(feature_importance)} features")
+            except Exception as e:
+                logger.warning(f"Feature importance calculation failed: {e}")
+                feature_importance = {}
             
             # Calculate cross-validation score
-            cross_validation_score = self._calculate_cross_validation_score(model, X)
+            try:
+                cross_validation_score = self._calculate_cross_validation_score(model, X)
+                if cross_validation_score is not None:
+                    logger.info(f"Cross-validation score: {cross_validation_score:.4f}")
+                else:
+                    logger.warning("Cross-validation score calculation returned None")
+            except Exception as e:
+                logger.warning(f"Cross-validation score calculation failed: {e}")
+                cross_validation_score = None
             
             # Calculate thresholds and recommendations
             thresholds = self._calculate_thresholds(scores)
+            logger.info(f"Calculated {len(thresholds)} threshold values")
             
-            return {
+            # Generate recommendations
+            recommendations = self._generate_recommendations(basic_metrics, thresholds)
+            logger.info(f"Generated {len(recommendations)} recommendations")
+            
+            evaluation_results = {
                 'basic_metrics': basic_metrics,
                 'score_distribution': score_distribution,
                 'feature_importance': feature_importance,
                 'cross_validation_score': cross_validation_score,
                 'thresholds': thresholds,
-                'recommendations': self._generate_recommendations(basic_metrics, thresholds)
+                'recommendations': recommendations,
+                'evaluation_summary': {
+                    'total_samples': X.shape[0],
+                    'total_features': X.shape[1],
+                    'score_range': float(np.max(scores) - np.min(scores)),
+                    'score_mean': float(np.mean(scores)),
+                    'score_std': float(np.std(scores)),
+                    'evaluation_timestamp': datetime.now().isoformat()
+                }
             }
+            
+            logger.info("Model evaluation completed successfully")
+            return evaluation_results
             
         except Exception as e:
             logger.error(f"Error evaluating model: {e}")
+            logger.error(f"Error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
             return {
                 'basic_metrics': {},
                 'score_distribution': {},
@@ -65,7 +104,13 @@ class ModelEvaluator:
                 'cross_validation_score': None,
                 'thresholds': {},
                 'recommendations': [],
-                'error': str(e)
+                'error': str(e),
+                'error_type': type(e).__name__,
+                'evaluation_summary': {
+                    'error_occurred': True,
+                    'error_message': str(e),
+                    'evaluation_timestamp': datetime.now().isoformat()
+                }
             }
     
     def _calculate_basic_metrics(self, scores: np.ndarray) -> Dict[str, float]:
@@ -129,21 +174,41 @@ class ModelEvaluator:
     def _calculate_permutation_importance(self, model, X: np.ndarray) -> np.ndarray:
         """Calculate permutation importance for unsupervised models."""
         try:
-            from sklearn.inspection import permutation_importance
+            # For unsupervised models, we can't use standard permutation importance
+            # Instead, we'll calculate feature importance based on how much the model's
+            # predictions change when we shuffle each feature
             
-            # For unsupervised models, we use the negative mean absolute error as scoring
-            def scoring_function(estimator, X, y=None):
-                scores = estimator.score_samples(X)
-                return -np.mean(np.abs(scores))
+            # Use a small sample for efficiency
+            sample_size = min(1000, X.shape[0])
+            sample_indices = np.random.choice(X.shape[0], sample_size, replace=False)
+            X_sample = X[sample_indices]
             
-            result = permutation_importance(
-                model, X, 
-                scoring=scoring_function,
-                n_repeats=5,
-                random_state=42
-            )
+            # Get baseline scores
+            baseline_scores = model.score_samples(X_sample)
             
-            return result.importances_mean
+            # Calculate importance for each feature
+            feature_importance = np.zeros(X_sample.shape[1])
+            for feature_idx in range(X_sample.shape[1]):
+                # Create a copy of the data with this feature shuffled
+                X_shuffled = X_sample.copy()
+                np.random.shuffle(X_shuffled[:, feature_idx])
+                
+                # Get scores with shuffled feature
+                shuffled_scores = model.score_samples(X_shuffled)
+                
+                # Calculate importance as the difference in score variance
+                # Higher difference means the feature is more important
+                baseline_var = np.var(baseline_scores)
+                shuffled_var = np.var(shuffled_scores)
+                importance = abs(baseline_var - shuffled_var)
+                
+                feature_importance[feature_idx] = importance
+            
+            # Normalize importance scores
+            if np.max(feature_importance) > 0:
+                feature_importance = feature_importance / np.max(feature_importance)
+            
+            return feature_importance
             
         except Exception as e:
             logger.error(f"Error calculating permutation importance: {e}")

@@ -7,12 +7,15 @@
             <div class="loading-message mb-3">Loading...</div>
             <div class="loading-recovery" style="display: none;">
                 <small class="text-muted d-block mb-2">If this takes too long, you can:</small>
-                <button class="btn btn-sm btn-outline-secondary me-2" onclick="utils.forceHideAllLoading()">
+                <button class="btn btn-sm btn-outline-secondary me-2" onclick="recoverFromStuckLoading()">
                     <i class="bi bi-x-circle"></i> Clear Loading
                 </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i> Refresh Page
                 </button>
+                <div class="mt-2">
+                    <small class="text-muted">Or press <kbd>Ctrl+Shift+R</kbd> for emergency recovery</small>
+                </div>
             </div>
         </div>
     </div>

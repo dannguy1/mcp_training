@@ -22,6 +22,12 @@ class TrainingManager {
     
     init() {
         console.log('TrainingManager init called');
+        
+        // Safety: Clear any stuck loading states
+        if (typeof utils !== 'undefined') {
+            utils.hideLoading();
+        }
+        
         this.setupEventListeners();
         this.setupRefreshButton();
         this.loadTrainingJobs();
@@ -113,6 +119,10 @@ class TrainingManager {
             
             newTrainingModal.addEventListener('hidden.bs.modal', () => {
                 this.resetTrainingForm();
+                // Safety: Clear any stuck loading states when modal closes
+                if (typeof utils !== 'undefined') {
+                    utils.hideLoading();
+                }
             });
         }
         
@@ -141,17 +151,22 @@ class TrainingManager {
     
     async loadTrainingJobs() {
         try {
-            utils.showLoading();
+            console.log('Loading training jobs...');
             const jobsResponse = await utils.apiCall('/api/training/jobs');
             const jobs = jobsResponse.trainings || jobsResponse;
             this.jobs = jobs;
             this.filteredJobs = [...jobs];
             this.updateTrainingTable();
             this.updateJobStatistics();
+            console.log(`Loaded ${jobs.length} training jobs`);
         } catch (error) {
+            console.error('Failed to load training jobs:', error);
             utils.showError('Failed to load training jobs', error);
-        } finally {
-            utils.hideLoading();
+            // Set empty arrays to prevent UI issues
+            this.jobs = [];
+            this.filteredJobs = [];
+            this.updateTrainingTable();
+            this.updateJobStatistics();
         }
     }
     
@@ -309,7 +324,7 @@ class TrainingManager {
                 return;
             }
             
-            utils.showLoading();
+            utils.showLoading('Starting training job...');
             
             const exportFilesSelect = document.getElementById('exportFiles');
             const jobName = document.getElementById('jobName')?.value;
@@ -341,6 +356,8 @@ class TrainingManager {
                 requestData.description = description;
             }
             
+            console.log('Submitting training request:', requestData);
+            
             const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
                 body: JSON.stringify(requestData)
@@ -355,11 +372,13 @@ class TrainingManager {
             }
             
             // Refresh the training jobs list
-            this.loadTrainingJobs();
+            await this.loadTrainingJobs();
             
         } catch (error) {
+            console.error('Training submission error:', error);
             utils.showError('Failed to start training job', error);
         } finally {
+            // Always ensure loading state is cleared
             utils.hideLoading();
         }
     }

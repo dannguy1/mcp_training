@@ -58,7 +58,10 @@ class TrainingService:
             if existing_task.get('export_files') == export_files:
                 # Check if job is currently running or was completed very recently (within last 30 seconds)
                 if existing_task.get('status') in ['initializing', 'running']:
-                    logger.warning(f"Duplicate training request detected for export files: {export_files}")
+                    logger.info(f"Duplicate training request detected for running job: {existing_id}")
+                    logger.info(f"Export files: {export_files}")
+                    logger.info(f"Current status: {existing_task.get('status')}")
+                    logger.info(f"Current progress: {existing_task.get('progress', 0)}%")
                     logger.info(f"Returning existing training ID: {existing_id}")
                     return existing_id
                 elif existing_task.get('status') == 'completed':
@@ -72,9 +75,12 @@ class TrainingService:
                             
                             time_since_completion = (datetime.now() - completed_time).total_seconds()
                             if time_since_completion < 30:  # 30 seconds threshold
-                                logger.warning(f"Duplicate training request detected for recently completed job: {existing_id}")
+                                logger.info(f"Duplicate training request detected for recently completed job: {existing_id}")
+                                logger.info(f"Completed {time_since_completion:.1f} seconds ago")
                                 logger.info(f"Returning existing training ID: {existing_id}")
                                 return existing_id
+                            else:
+                                logger.info(f"Previous job completed {time_since_completion:.1f} seconds ago, starting new job")
                         except Exception as e:
                             logger.warning(f"Error checking completion time for job {existing_id}: {e}")
         
@@ -96,18 +102,26 @@ class TrainingService:
                                 
                                 time_since_creation = (datetime.now() - created_time).total_seconds()
                                 if time_since_creation < 30:  # 30 seconds threshold
-                                    logger.warning(f"Duplicate training request detected for recently created model: {version}")
+                                    logger.info(f"Duplicate training request detected for recently created model: {version}")
+                                    logger.info(f"Model created {time_since_creation:.1f} seconds ago")
                                     # Return the training_id from the existing model
                                     training_id = getattr(metadata.model_info, 'training_id', None)
                                     if training_id:
                                         logger.info(f"Returning existing training ID: {training_id}")
                                         return training_id
+                                else:
+                                    logger.info(f"Previous model created {time_since_creation:.1f} seconds ago, starting new job")
                             except Exception as e:
                                 logger.warning(f"Error checking creation time for model {version}: {e}")
         except Exception as e:
             logger.warning(f"Error checking model registry for duplicates: {e}")
         
+        # Create new training job
         training_id = str(uuid.uuid4())
+        logger.info(f"Creating new training job: {training_id}")
+        logger.info(f"Export files: {export_files}")
+        logger.info(f"Model type: {model_type}")
+        logger.info(f"Model name: {model_name}")
         
         # Initialize training task
         self.training_tasks[training_id] = {
@@ -122,7 +136,8 @@ class TrainingService:
             'updated_at': datetime.now().isoformat(),
             'export_files': export_files,
             'model_type': model_type,
-            'model_name': model_name
+            'model_name': model_name,
+            'config_overrides': config_overrides
         }
         
         # Start training in background
@@ -130,6 +145,7 @@ class TrainingService:
             training_id, export_files, model_type, model_name, config_overrides
         ))
         
+        logger.info(f"Training job {training_id} started successfully")
         return training_id
     
     async def _run_training_task(self, 

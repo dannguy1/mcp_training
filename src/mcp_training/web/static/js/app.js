@@ -59,24 +59,26 @@ class MCPTrainingApp {
         // Quick actions
         this.updateQuickActions();
         
-        // Training modal events
-        const newTrainingModal = document.getElementById('newTrainingModal');
-        if (newTrainingModal) {
-            newTrainingModal.addEventListener('show.bs.modal', () => {
-                this.loadExportFiles();
-            });
+        // Training modal events - only for dashboard page
+        if (this.currentPage === 'dashboard') {
+            const newTrainingModal = document.getElementById('newTrainingModal');
+            if (newTrainingModal) {
+                newTrainingModal.addEventListener('show.bs.modal', () => {
+                    this.loadExportFiles();
+                });
+                
+                newTrainingModal.addEventListener('hidden.bs.modal', () => {
+                    this.resetTrainingForm();
+                });
+            }
             
-            newTrainingModal.addEventListener('hidden.bs.modal', () => {
-                this.resetTrainingForm();
-            });
-        }
-        
-        // Submit training button
-        const submitTrainingBtn = document.getElementById('submitTrainingBtn');
-        if (submitTrainingBtn) {
-            submitTrainingBtn.addEventListener('click', () => {
-                this.submitTraining();
-            });
+            // Submit training button - only for dashboard page
+            const submitTrainingBtn = document.getElementById('submitTrainingBtn');
+            if (submitTrainingBtn) {
+                submitTrainingBtn.addEventListener('click', () => {
+                    this.submitTraining();
+                });
+            }
         }
         
         // Global error handling
