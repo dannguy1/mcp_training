@@ -574,6 +574,25 @@ window.recoverFromStuckLoading = function() {
     document.body.style.overflow = '';
     document.body.style.paddingRight = '';
     
+    // Force close any open modals
+    const openModals = document.querySelectorAll('.modal.show');
+    openModals.forEach(modal => {
+        const modalInstance = bootstrap.Modal.getInstance(modal);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+    });
+    
+    // Additional cleanup for any remaining modal artifacts
+    const modalElements = document.querySelectorAll('.modal');
+    modalElements.forEach(modal => {
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        modal.removeAttribute('aria-modal');
+        modal.removeAttribute('role');
+    });
+    
     console.log('Recovery completed');
 };
 
@@ -612,12 +631,33 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 
-// Emergency recovery keyboard shortcut (Ctrl+Shift+R)
+// Emergency recovery keyboard shortcut
 document.addEventListener('keydown', function(event) {
+    // Ctrl+Shift+R for emergency recovery
     if (event.ctrlKey && event.shiftKey && event.key === 'R') {
-        console.log('Emergency recovery shortcut triggered');
+        console.log('Emergency recovery triggered via keyboard shortcut');
         event.preventDefault();
         recoverFromStuckLoading();
-        showInfo('Emergency recovery completed. If issues persist, please refresh the page.');
+    }
+    
+    // Escape key to close modals and clear loading
+    if (event.key === 'Escape') {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay && overlay.style.display === 'flex') {
+            console.log('Escape key pressed, clearing loading state');
+            hideLoading();
+        }
+        
+        // Also try to close any open modals
+        const openModals = document.querySelectorAll('.modal.show');
+        if (openModals.length > 0) {
+            console.log('Escape key pressed, closing open modals');
+            openModals.forEach(modal => {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            });
+        }
     }
 }); 

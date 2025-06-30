@@ -598,6 +598,8 @@ class TrainingPipeline:
         try:
             from .registry import ModelRegistry
             from .metadata import ModelMetadata, ModelInfo, TrainingInfo, EvaluationInfo
+            import joblib
+            import tempfile
             
             # Create model registry
             project_root = Path(__file__).parent.parent.parent.parent
@@ -640,8 +642,27 @@ class TrainingPipeline:
                 evaluation_info=evaluation_info
             )
             
-            # Save model
-            model_path = registry.save_model(model, metadata)
+            # Save model to temporary file first
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Save model
+                model_file = temp_path / "model.joblib"
+                joblib.dump(model, model_file)
+                
+                # Save scaler if available
+                scaler_file = None
+                if hasattr(self, 'scaler') and self.scaler:
+                    scaler_file = temp_path / "scaler.joblib"
+                    joblib.dump(self.scaler, scaler_file)
+                
+                # Save to registry with correct parameters
+                model_path = registry.save_model(
+                    version=version,
+                    model_metadata=metadata,
+                    model_file=model_file,
+                    scaler_file=scaler_file
+                )
             
             logger.info(f"Model saved: {model_path.name}")
             return model_path

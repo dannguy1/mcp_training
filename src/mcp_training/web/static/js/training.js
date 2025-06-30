@@ -123,6 +123,9 @@ class TrainingManager {
                 if (typeof utils !== 'undefined') {
                     utils.hideLoading();
                 }
+                
+                // Clean up Bootstrap modal backdrops and body classes
+                this.cleanupModalBackdrop();
             });
         }
         
@@ -371,6 +374,11 @@ class TrainingManager {
                 modal.hide();
             }
             
+            // Ensure proper cleanup
+            setTimeout(() => {
+                this.cleanupModalBackdrop();
+            }, 100);
+            
             // Refresh the training jobs list
             await this.loadTrainingJobs();
             
@@ -380,6 +388,11 @@ class TrainingManager {
         } finally {
             // Always ensure loading state is cleared
             utils.hideLoading();
+            
+            // Additional cleanup to prevent stuck states
+            setTimeout(() => {
+                this.cleanupModalBackdrop();
+            }, 200);
         }
     }
     
@@ -1188,6 +1201,18 @@ class TrainingManager {
             };
             uploadBtn.addEventListener('click', this.uploadBtnClickHandler);
         }
+    }
+    
+    cleanupModalBackdrop() {
+        // Clean up Bootstrap modal backdrops and body classes
+        const modalBackdrops = document.querySelectorAll('.modal-backdrop');
+        modalBackdrops.forEach(backdrop => {
+            backdrop.remove();
+        });
+        
+        const bodyClasses = document.body.classList;
+        bodyClasses.remove('modal-open');
+        bodyClasses.remove('modal-backdrop');
     }
 }
 
