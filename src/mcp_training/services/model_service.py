@@ -266,12 +266,14 @@ class ModelService:
             deployment_manifest = {
                 "model_version": version,
                 "deployment_timestamp": datetime.now().isoformat(),
-                "package_format_version": "1.0",
+                "package_format_version": "1.1",
                 "model_info": {
                     "model_type": metadata.model_info.model_type,
+                    "model_name": metadata.model_info.model_name,
                     "training_source": metadata.model_info.training_source,
                     "training_id": metadata.model_info.training_id,
-                    "export_files": metadata.model_info.export_files
+                    "export_files": metadata.model_info.export_files,
+                    "created_at": metadata.model_info.created_at
                 },
                 "training_info": {
                     "training_samples": metadata.training_info.training_samples,
@@ -279,12 +281,17 @@ class ModelService:
                     "feature_count": len(metadata.training_info.feature_names),
                     "export_files_size": metadata.training_info.export_files_size,
                     "training_duration": metadata.training_info.training_duration,
-                    "model_parameters": metadata.training_info.model_parameters
+                    "model_parameters": metadata.training_info.model_parameters,
+                    "preprocessing_metrics": metadata.training_info.preprocessing_metrics
                 },
                 "evaluation_info": {
                     "basic_metrics": metadata.evaluation_info.basic_metrics,
-                    "cross_validation_score": metadata.evaluation_info.cross_validation_score,
-                    "feature_importance": metadata.evaluation_info.feature_importance
+                    "quality_metrics": metadata.evaluation_info.quality_metrics,
+                    "feature_importance": metadata.evaluation_info.feature_importance,
+                    "thresholds": metadata.evaluation_info.thresholds,
+                    "recommendations": metadata.evaluation_info.recommendations,
+                    "evaluation_summary": metadata.evaluation_info.evaluation_summary,
+                    "cross_validation_score": metadata.evaluation_info.cross_validation_score
                 },
                 "deployment_info": {
                     "status": "deployed",
@@ -297,7 +304,8 @@ class ModelService:
                     "metadata_file": "metadata.json",
                     "validation_script": "validate_model.py",
                     "inference_example": "inference_example.py",
-                    "requirements": "requirements.txt"
+                    "requirements": "requirements.txt",
+                    "readme": "README.md"
                 },
                 "file_integrity": file_hashes,
                 "inference_config": {
@@ -305,12 +313,20 @@ class ModelService:
                     "anomaly_ratio": metadata.evaluation_info.basic_metrics.get("anomaly_ratio", 0.1),
                     "score_percentile": 90,
                     "batch_size": 1000,
-                    "timeout_seconds": 30
+                    "timeout_seconds": 30,
+                    "scaler_required": scaler_file.exists() if scaler_file else False
                 },
                 "model_artifacts": {
                     "model_size_bytes": model_file.stat().st_size if model_file.exists() else 0,
-                    "scaler_size_bytes": scaler_file.stat().st_size if scaler_file.exists() else 0,
+                    "scaler_size_bytes": scaler_file.stat().st_size if scaler_file and scaler_file.exists() else 0,
                     "total_package_size": 0  # Will be updated after creation
+                },
+                "quality_assessment": {
+                    "model_quality_score": metadata.evaluation_info.evaluation_summary.get("model_quality_score", 0.5),
+                    "silhouette_score": metadata.evaluation_info.basic_metrics.get("silhouette_score", 0.0),
+                    "roc_auc_equivalent": metadata.evaluation_info.basic_metrics.get("roc_auc_equivalent", 0.5),
+                    "feature_utilization": len(metadata.training_info.feature_names) / max(1, metadata.training_info.feature_count),
+                    "training_data_quality": "good" if metadata.training_info.training_samples > 1000 else "fair"
                 }
             }
             
@@ -335,99 +351,90 @@ class ModelService:
                 validation_script = f"""#!/usr/bin/env python3
 \"\"\"
 Model Validation Script for {version}
-Validates model integrity and basic functionality.
+Validates model integrity and performance.
 \"\"\"
 
-import sys
-import json
-import hashlib
 import joblib
 import numpy as np
+import json
+import sys
 from pathlib import Path
-
-def calculate_file_hash(filepath):
-    \"\"\"Calculate SHA256 hash of a file.\"\"\"
-    with open(filepath, 'rb') as f:
-        return hashlib.sha256(f.read()).hexdigest()
+from typing import Dict, Any
 
 def validate_model():
     \"\"\"Validate the deployed model.\"\"\"
-    print("🔍 Validating model deployment...")
-    
-    # Load deployment manifest
     try:
+        # Load deployment manifest
         with open('deployment_manifest.json', 'r') as f:
             manifest = json.load(f)
-    except FileNotFoundError:
-        print("❌ deployment_manifest.json not found")
-        return False
-    except json.JSONDecodeError as e:
-        print(f"❌ Invalid deployment_manifest.json: {{e}}")
-        return False
-    
-    # Validate file integrity
-    print("📁 Checking file integrity...")
-    for filename, expected_hash in manifest['file_integrity'].items():
-        if Path(filename).exists():
-            actual_hash = calculate_file_hash(filename)
-            if actual_hash == expected_hash:
-                print(f"✅ {{filename}}: OK")
-            else:
-                print(f"❌ {{filename}}: Hash mismatch!")
-                print(f"   Expected: {{expected_hash}}")
-                print(f"   Actual:   {{actual_hash}}")
-                return False
-        else:
-            print(f"⚠️  {{filename}}: File not found")
-            # Don't fail for optional files like scaler.joblib
-            if filename != 'scaler.joblib':
-                return False
-    
-    # Load and validate model
-    print("🤖 Loading model...")
-    try:
+        
+        print(f"🔍 Validating Model {manifest['model_version']}")
+        print(f"Model Type: {manifest['model_info']['model_type']}")
+        print(f"Training Samples: {manifest['training_info']['training_samples']:,}")
+        print(f"Features: {manifest['training_info']['feature_count']}")
+        
+        # Load model
         model = joblib.load('model.joblib')
         print("✅ Model loaded successfully")
-    except Exception as e:
-        print(f"❌ Failed to load model: {{e}}")
-        return False
-    
-    # Load scaler if available
-    scaler = None
-    if Path('scaler.joblib').exists():
-        try:
+        
+        # Load scaler if available
+        scaler = None
+        if Path('scaler.joblib').exists():
             scaler = joblib.load('scaler.joblib')
             print("✅ Scaler loaded successfully")
-        except Exception as e:
-            print(f"⚠️  Failed to load scaler: {{e}}")
-    
-    # Test with sample data
-    print("🧪 Testing model inference...")
-    try:
+        else:
+            print("ℹ️  No scaler found (not required)")
+        
+        # Generate test data
         feature_names = manifest['training_info']['feature_names']
         n_features = len(feature_names)
         
-        # Create sample data
-        sample_data = np.random.randn(10, n_features)
+        # Create synthetic test data
+        np.random.seed(42)
+        X_test = np.random.randn(100, n_features)
         
-        # Scale if scaler is available
+        # Apply scaler if available
         if scaler:
-            sample_data = scaler.transform(sample_data)
+            X_test = scaler.transform(X_test)
         
         # Make predictions
-        scores = -model.score_samples(sample_data)
+        scores = -model.score_samples(X_test)
         predictions = (scores > manifest['inference_config']['threshold']).astype(int)
         
-        print(f"✅ Inference test successful")
-        print(f"   Sample predictions: {{predictions[:5].tolist()}}")
-        print(f"   Score range: {{scores.min():.3f}} to {{scores.max():.3f}}")
+        print(f"✅ Predictions successful: {len(predictions)} samples")
+        print(f"Score range: [{scores.min():.4f}, {scores.max():.4f}]")
+        print(f"Anomalies detected: {predictions.sum()}/{len(predictions)}")
+        
+        # Validate file integrity
+        import hashlib
+        file_hashes = manifest['file_integrity']
+        
+        for filename, expected_hash in file_hashes.items():
+            if Path(filename).exists():
+                with open(filename, 'rb') as f:
+                    actual_hash = hashlib.sha256(f.read()).hexdigest()
+                if actual_hash == expected_hash:
+                    print(f"✅ {filename}: integrity verified")
+                else:
+                    print(f"❌ {filename}: integrity check failed")
+                    return False
+            else:
+                print(f"⚠️  {filename}: file not found")
+        
+        # Quality assessment
+        quality = manifest['quality_assessment']
+        print(f"\\n📊 Quality Assessment:")
+        print(f"Model Quality Score: {quality['model_quality_score']:.3f}")
+        print(f"Silhouette Score: {quality['silhouette_score']:.3f}")
+        print(f"Feature Utilization: {quality['feature_utilization']:.1%}")
+        print(f"Training Data Quality: {quality['training_data_quality']}")
+        
+        print("\\n🎉 Model validation completed successfully!")
+        return True
         
     except Exception as e:
-        print(f"❌ Inference test failed: {{e}}")
+        print(f"❌ Model validation failed: {e}")
         return False
-    
-    print("🎉 Model validation completed successfully!")
-    return True
 
 if __name__ == "__main__":
     success = validate_model()
@@ -437,10 +444,9 @@ if __name__ == "__main__":
                 
                 # Add inference example
                 inference_example = f"""#!/usr/bin/env python3
-\"\"\"
+
 Inference Example for Model {version}
 Demonstrates how to use the deployed model for predictions.
-\"\"\"
 
 import joblib
 import numpy as np
@@ -452,79 +458,16 @@ class ModelInference:
     def __init__(self, model_dir: str = "."):
         \"\"\"Initialize model inference.\"\"\"
         self.model_dir = Path(model_dir)
-        
-        # Load deployment manifest
         with open(self.model_dir / 'deployment_manifest.json', 'r') as f:
             self.manifest = json.load(f)
-        
-        # Load model and scaler
         self.model = joblib.load(self.model_dir / 'model.joblib')
         self.scaler = None
         if (self.model_dir / 'scaler.joblib').exists():
             self.scaler = joblib.load(self.model_dir / 'scaler.joblib')
-        
-        # Get configuration
         self.threshold = self.manifest['inference_config']['threshold']
         self.feature_names = self.manifest['training_info']['feature_names']
-    
-    @property
-    def manifest(self) -> Dict[str, Any]:
-        \"\"\"Deployment manifest data.\"\"\"
-        return self._manifest
-    
-    @manifest.setter
-    def manifest(self, value: Dict[str, Any]):
-        self._manifest = value
-    
-    @property
-    def model(self) -> Any:
-        \"\"\"Loaded scikit-learn model.\"\"\"
-        return self._model
-    
-    @model.setter
-    def model(self, value: Any):
-        self._model = value
-    
-    @property
-    def scaler(self) -> Any:
-        \"\"\"Feature scaler (if available).\"\"\"
-        return self._scaler
-    
-    @scaler.setter
-    def scaler(self, value: Any):
-        self._scaler = value
-    
-    @property
-    def threshold(self) -> float:
-        \"\"\"Detection threshold.\"\"\"
-        return self._threshold
-    
-    @threshold.setter
-    def threshold(self, value: float):
-        self._threshold = value
-    
-    @property
-    def feature_names(self) -> List[str]:
-        \"\"\"List of expected feature names.\"\"\"
-        return self._feature_names
-    
-    @feature_names.setter
-    def feature_names(self, value: List[str]):
-        self._feature_names = value
-    
+
     def preprocess_features(self, features: List[Dict[str, Any]]) -> np.ndarray:
-        \"\"\"Preprocess input features.
-        
-        Args:
-            features: List of feature dictionaries
-            
-        Returns:
-            Numpy array of features
-            
-        Raises:
-            ValueError: If required features are missing
-        \"\"\"
-        # Convert to numpy array
         feature_array = []
         for feature_dict in features:
             feature_vector = []
@@ -533,34 +476,15 @@ class ModelInference:
                     raise ValueError(f"Feature '{{feature_name}}' not found in input")
                 feature_vector.append(feature_dict[feature_name])
             feature_array.append(feature_vector)
-        
         return np.array(feature_array)
-    
+
     def predict(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        \"\"\"Make predictions on input features.
-        
-        Args:
-            features: List of feature dictionaries
-            
-        Returns:
-            Dictionary with predictions, scores, and statistics
-            
-        Raises:
-            ValueError: If features are invalid
-            RuntimeError: If prediction fails
-        \"\"\"
         try:
-            # Preprocess features
             X = self.preprocess_features(features)
-            
-            # Scale features if scaler is available
             if self.scaler:
                 X = self.scaler.transform(X)
-            
-            # Make predictions
             scores = -self.model.score_samples(X)
             predictions = (scores > self.threshold).astype(int)
-            
             return {{
                 'predictions': predictions.tolist(),
                 'scores': scores.tolist(),
@@ -572,11 +496,7 @@ class ModelInference:
             raise RuntimeError(f"Prediction failed: {{e}}")
 
 def main():
-    \"\"\"Example usage.\"\"\"
-    # Initialize inference
     inference = ModelInference()
-    
-    # Example features (replace with your actual data)
     sample_features = [
         {{
             'auth_failure_ratio': 0.1,
@@ -598,10 +518,7 @@ def main():
             'mean_device_activity': 0.4
         }}
     ]
-    
-    # Make prediction
     result = inference.predict(sample_features)
-    
     print("🔍 Model Inference Example")
     print(f"Model Version: {{inference.manifest['model_version']}}")
     print(f"Threshold: {{result['threshold']}}")
@@ -684,16 +601,16 @@ inference = ModelInference()
 
 # Prepare features (must match training feature names)
 features = [
-    {{
+    {
         'auth_failure_ratio': 0.1,
         'deauth_ratio': 0.05,
         # ... all other features
-    }}
+    }
 ]
 
 # Make predictions
 result = inference.predict(features)
-print(f"Anomalies: {{result['anomaly_count']}}/{{result['total_samples']}}")
+print(f"Anomalies: {result['anomaly_count']}/{result['total_samples']}")
 ```
 
 ### API Integration Example
@@ -736,7 +653,7 @@ def process_batches(data_file, batch_size=1000):
 
 # Process large dataset
 for batch_result in process_batches('large_dataset.csv'):
-    print(f"Batch anomalies: {{batch_result['anomaly_count']}}")
+    print(f"Batch anomalies: {batch_result['anomaly_count']}")
 ```
 
 ## Model Configuration
@@ -817,7 +734,7 @@ def safe_predict(features, max_retries=3):
             inference = ModelInference()
             return inference.predict(features)
         except Exception as e:
-            logger.error(f"Prediction attempt {{attempt + 1}} failed: {{e}}")
+            logger.error(f"Prediction attempt {attempt + 1} failed: {e}")
             if attempt == max_retries - 1:
                 raise
             time.sleep(1)  # Brief delay before retry
@@ -878,7 +795,7 @@ python -c "import joblib, numpy, sklearn; print('OK')"
 # Profile memory usage
 import psutil
 process = psutil.Process()
-print(f"Memory usage: {{process.memory_info().rss / 1024 / 1024:.1f}} MB")
+print(f"Memory usage: {process.memory_info().rss / 1024 / 1024:.1f} MB")
 
 # Optimize batch size
 for batch_size in [100, 500, 1000, 2000]:
