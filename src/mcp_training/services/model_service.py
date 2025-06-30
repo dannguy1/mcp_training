@@ -271,7 +271,7 @@ class ModelService:
                     "model_type": metadata.model_info.model_type,
                     "training_source": metadata.model_info.training_source,
                     "training_id": metadata.model_info.training_id,
-                    "export_file": metadata.model_info.export_file
+                    "export_files": metadata.model_info.export_files
                 },
                 "training_info": {
                     "training_samples": metadata.training_info.training_samples,
@@ -910,7 +910,7 @@ For issues with this model deployment:
 ### Version History
 - **Current**: {version}
 - **Training ID**: {metadata.model_info.training_id or 'N/A'}
-- **Source**: {metadata.model_info.export_file or 'N/A'}
+- **Source**: {metadata.model_info.export_files or 'N/A'}
 
 ### Monitoring
 Monitor model performance in production:
