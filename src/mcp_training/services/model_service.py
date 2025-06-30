@@ -325,7 +325,7 @@ class ModelService:
                     "model_quality_score": metadata.evaluation_info.evaluation_summary.get("model_quality_score", 0.5),
                     "silhouette_score": metadata.evaluation_info.basic_metrics.get("silhouette_score", 0.0),
                     "roc_auc_equivalent": metadata.evaluation_info.basic_metrics.get("roc_auc_equivalent", 0.5),
-                    "feature_utilization": len(metadata.training_info.feature_names) / max(1, metadata.training_info.feature_count),
+                    "feature_utilization": len(metadata.training_info.feature_names) / max(1, len(metadata.training_info.feature_names)),
                     "training_data_quality": "good" if metadata.training_info.training_samples > 1000 else "fair"
                 }
             }
@@ -348,9 +348,9 @@ class ModelService:
                 zipf.writestr("deployment_manifest.json", manifest_content)
                 
                 # Add model validation script
-                validation_script = f"""#!/usr/bin/env python3
+                validation_script = """#!/usr/bin/env python3
 \"\"\"
-Model Validation Script for {version}
+Model Validation Script
 Validates model integrity and performance.
 \"\"\"
 
@@ -368,10 +368,10 @@ def validate_model():
         with open('deployment_manifest.json', 'r') as f:
             manifest = json.load(f)
         
-        print(f"🔍 Validating Model {manifest['model_version']}")
-        print(f"Model Type: {manifest['model_info']['model_type']}")
-        print(f"Training Samples: {manifest['training_info']['training_samples']:,}")
-        print(f"Features: {manifest['training_info']['feature_count']}")
+        print("🔍 Validating Model " + manifest['model_version'])
+        print("Model Type: " + manifest['model_info']['model_type'])
+        print("Training Samples: " + str(manifest['training_info']['training_samples']))
+        print("Features: " + str(manifest['training_info']['feature_count']))
         
         # Load model
         model = joblib.load('model.joblib')
@@ -401,9 +401,9 @@ def validate_model():
         scores = -model.score_samples(X_test)
         predictions = (scores > manifest['inference_config']['threshold']).astype(int)
         
-        print(f"✅ Predictions successful: {len(predictions)} samples")
-        print(f"Score range: [{scores.min():.4f}, {scores.max():.4f}]")
-        print(f"Anomalies detected: {predictions.sum()}/{len(predictions)}")
+        print("✅ Predictions successful: " + str(len(predictions)) + " samples")
+        print("Score range: [" + str(scores.min()) + ", " + str(scores.max()) + "]")
+        print("Anomalies detected: " + str(predictions.sum()) + "/" + str(len(predictions)))
         
         # Validate file integrity
         import hashlib
@@ -414,26 +414,26 @@ def validate_model():
                 with open(filename, 'rb') as f:
                     actual_hash = hashlib.sha256(f.read()).hexdigest()
                 if actual_hash == expected_hash:
-                    print(f"✅ {filename}: integrity verified")
+                    print("✅ " + filename + ": integrity verified")
                 else:
-                    print(f"❌ {filename}: integrity check failed")
+                    print("❌ " + filename + ": integrity check failed")
                     return False
             else:
-                print(f"⚠️  {filename}: file not found")
+                print("⚠️  " + filename + ": file not found")
         
         # Quality assessment
         quality = manifest['quality_assessment']
-        print(f"\\n📊 Quality Assessment:")
-        print(f"Model Quality Score: {quality['model_quality_score']:.3f}")
-        print(f"Silhouette Score: {quality['silhouette_score']:.3f}")
-        print(f"Feature Utilization: {quality['feature_utilization']:.1%}")
-        print(f"Training Data Quality: {quality['training_data_quality']}")
+        print("\\n📊 Quality Assessment:")
+        print("Model Quality Score: " + str(quality['model_quality_score']))
+        print("Silhouette Score: " + str(quality['silhouette_score']))
+        print("Feature Utilization: " + str(quality['feature_utilization']))
+        print("Training Data Quality: " + quality['training_data_quality'])
         
         print("\\n🎉 Model validation completed successfully!")
         return True
         
     except Exception as e:
-        print(f"❌ Model validation failed: {e}")
+        print("❌ Model validation failed: " + str(e))
         return False
 
 if __name__ == "__main__":
@@ -443,9 +443,9 @@ if __name__ == "__main__":
                 zipf.writestr("validate_model.py", validation_script)
                 
                 # Add inference example
-                inference_example = f"""#!/usr/bin/env python3
+                inference_example = """#!/usr/bin/env python3
 
-Inference Example for Model {version}
+Inference Example
 Demonstrates how to use the deployed model for predictions.
 
 import joblib
@@ -473,7 +473,7 @@ class ModelInference:
             feature_vector = []
             for feature_name in self.feature_names:
                 if feature_name not in feature_dict:
-                    raise ValueError(f"Feature '{{feature_name}}' not found in input")
+                    raise ValueError("Feature '" + feature_name + "' not found in input")
                 feature_vector.append(feature_dict[feature_name])
             feature_array.append(feature_vector)
         return np.array(feature_array)
@@ -493,7 +493,7 @@ class ModelInference:
                 'total_samples': len(predictions)
             }}
         except Exception as e:
-            raise RuntimeError(f"Prediction failed: {{e}}")
+            raise RuntimeError("Prediction failed: " + str(e))
 
 def main():
     inference = ModelInference()
@@ -520,11 +520,11 @@ def main():
     ]
     result = inference.predict(sample_features)
     print("🔍 Model Inference Example")
-    print(f"Model Version: {{inference.manifest['model_version']}}")
-    print(f"Threshold: {{result['threshold']}}")
-    print(f"Predictions: {{result['predictions']}}")
-    print(f"Scores: {{result['scores']}}")
-    print(f"Anomalies detected: {{result['anomaly_count']}}/{{result['total_samples']}}")
+    print("Model Version: " + inference.manifest['model_version'])
+    print("Threshold: " + str(result['threshold']))
+    print("Predictions: " + str(result['predictions']))
+    print("Scores: " + str(result['scores']))
+    print("Anomalies detected: " + str(result['anomaly_count']) + "/" + str(result['total_samples']))
 
 if __name__ == "__main__":
     main()
@@ -550,15 +550,15 @@ pandas>=1.3.0
                 zipf.writestr("requirements.txt", requirements)
                 
                 # Add comprehensive README
-                readme_content = f"""# Model Deployment Package
+                readme_content = """# Model Deployment Package
 
 ## Model Information
-- **Version**: {version}
-- **Type**: {metadata.model_info.model_type}
-- **Training Samples**: {metadata.training_info.training_samples:,}
-- **Features**: {len(metadata.training_info.feature_names)}
-- **Deployed At**: {metadata.deployment_info.deployed_at}
-- **Training Duration**: {metadata.training_info.training_duration:.2f}s
+- **Version**: Model Version
+- **Type**: Model Type
+- **Training Samples**: Training Samples
+- **Features**: Number of Features
+- **Deployed At**: Deployment Time
+- **Training Duration**: Training Duration
 
 ## Package Contents
 
