@@ -832,8 +832,11 @@ class TrainingManager {
             // Add a small delay to ensure modal is fully rendered
             await new Promise(resolve => setTimeout(resolve, 100));
             
+            console.log('Making API call to /api/training/exports...');
             const exports = await utils.apiCall('/api/training/exports');
             console.log('Export files loaded:', exports);
+            console.log('Export files type:', typeof exports);
+            console.log('Export files length:', exports ? exports.length : 'null/undefined');
             
             const select = document.getElementById('exportFiles');
             if (!select) {
@@ -843,11 +846,14 @@ class TrainingManager {
                 return;
             }
             
+            console.log('Found export files select element:', select);
+            
             // Clear existing options
             select.innerHTML = '<option value="">Select export files...</option>';
             
             if (exports && exports.length > 0) {
-                exports.forEach(exportFile => {
+                exports.forEach((exportFile, index) => {
+                    console.log(`Adding export file ${index + 1}:`, exportFile);
                     const option = document.createElement('option');
                     option.value = exportFile.path;
                     option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
@@ -871,6 +877,7 @@ class TrainingManager {
             }
         } catch (error) {
             console.error('Error loading export files:', error);
+            console.error('Error details:', error.toString());
             utils.showError('Failed to load export files', error);
             
             // Add error option to dropdown
@@ -883,6 +890,8 @@ class TrainingManager {
     
     openTrainingModal() {
         console.log('TrainingManager.openTrainingModal called');
+        console.log('TrainingManager instance:', this);
+        console.log('Bootstrap available:', typeof bootstrap !== 'undefined');
         
         // Check if Bootstrap is available
         if (typeof bootstrap === 'undefined') {
@@ -900,6 +909,7 @@ class TrainingManager {
         }
         
         console.log('Modal element found:', modalElement);
+        console.log('Modal element classes:', modalElement.className);
         
         try {
             const modal = new bootstrap.Modal(modalElement);
@@ -918,6 +928,7 @@ class TrainingManager {
             }, 500);
         } catch (error) {
             console.error('Error showing modal:', error);
+            console.error('Error details:', error.toString());
             utils.showError('Failed to show modal: ' + error.message);
         }
     }
