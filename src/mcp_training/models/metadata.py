@@ -30,6 +30,7 @@ class TrainingInfo(BaseModel):
     export_files_size: Optional[int] = Field(None, description="Total export files size")
     training_duration: Optional[float] = Field(None, description="Training duration in seconds")
     model_parameters: Dict[str, Any] = Field(default_factory=dict, description="Model parameters")
+    preprocessing_metrics: Dict[str, Any] = Field(default_factory=dict, description="Preprocessing metrics")
 
 
 class EvaluationInfo(BaseModel):
@@ -40,6 +41,10 @@ class EvaluationInfo(BaseModel):
     score_distribution: Dict[str, Any] = Field(default_factory=dict, description="Score distribution")
     cross_validation_score: Optional[float] = Field(None, description="Cross-validation score")
     feature_importance: Optional[Dict[str, float]] = Field(None, description="Feature importance")
+    quality_metrics: Dict[str, Any] = Field(default_factory=dict, description="Quality metrics")
+    thresholds: Dict[str, Any] = Field(default_factory=dict, description="Threshold values")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations")
+    evaluation_summary: Dict[str, Any] = Field(default_factory=dict, description="Evaluation summary")
 
 
 class DeploymentInfo(BaseModel):

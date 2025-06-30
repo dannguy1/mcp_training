@@ -604,8 +604,12 @@ class TrainingPipeline:
             models_dir = project_root / "models"
             registry = ModelRegistry(str(models_dir))
             
+            # Generate version
+            version = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
             # Create metadata
             model_info = ModelInfo(
+                version=version,
                 model_type=model_type,
                 created_at=datetime.now().isoformat(),
                 training_id=training_id,
