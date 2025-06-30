@@ -16,6 +16,7 @@ class ModelInfo(BaseModel):
     version: str = Field(..., description="Model version")
     created_at: str = Field(..., description="Creation timestamp")
     model_type: str = Field(..., description="Type of model")
+    model_name: Optional[str] = Field(None, description="Model/job name specified by user")
     training_source: str = Field(default="export_data", description="Training data source")
     export_files: Optional[List[str]] = Field(None, description="Source export files")
     training_id: Optional[str] = Field(None, description="Training job ID")
@@ -74,13 +75,15 @@ class ModelMetadata(BaseModel):
                feature_names: List[str],
                export_files: Optional[List[str]] = None,
                training_id: Optional[str] = None,
-               model_parameters: Optional[Dict[str, Any]] = None) -> 'ModelMetadata':
+               model_parameters: Optional[Dict[str, Any]] = None,
+               model_name: Optional[str] = None) -> 'ModelMetadata':
         """Create new model metadata."""
         return cls(
             model_info=ModelInfo(
                 version=version,
                 created_at=datetime.now().isoformat(),
                 model_type=model_type,
+                model_name=model_name,
                 training_source="export_data",
                 export_files=export_files,
                 training_id=training_id

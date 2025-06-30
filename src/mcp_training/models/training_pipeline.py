@@ -214,7 +214,7 @@ class TrainingPipeline:
             stage_start = time.time()
             model_path = await self._save_model_with_metadata(
                 model, features_data, evaluation_results, export_file_paths[0], 
-                training_id, model_type
+                training_id, model_type, model_name
             )
             stage_duration = time.time() - stage_start
             
@@ -592,7 +592,8 @@ class TrainingPipeline:
         evaluation_results: Dict[str, Any],
         export_file: str,
         training_id: str,
-        model_type: str
+        model_type: str,
+        model_name: Optional[str] = None
     ) -> Path:
         """Save model with comprehensive metadata."""
         try:
@@ -613,6 +614,7 @@ class TrainingPipeline:
             model_info = ModelInfo(
                 version=version,
                 model_type=model_type,
+                model_name=model_name,
                 created_at=datetime.now().isoformat(),
                 training_id=training_id,
                 export_files=[export_file]

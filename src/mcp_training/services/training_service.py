@@ -238,7 +238,8 @@ class TrainingService:
                                       evaluation_results: Dict[str, Any],
                                       export_file: str,
                                       training_id: str,
-                                      model_type: str) -> Path:
+                                      model_type: str,
+                                      model_name: Optional[str] = None) -> Path:
         """Save model with comprehensive metadata."""
         try:
             # Generate version
@@ -253,7 +254,8 @@ class TrainingService:
                 feature_names=list(features.keys()) if features else [],
                 export_files=[export_file],
                 training_id=training_id,
-                model_parameters=self._get_model_parameters(model)
+                model_parameters=self._get_model_parameters(model),
+                model_name=model_name
             )
             
             # Update evaluation results
@@ -403,7 +405,7 @@ class TrainingService:
                             'updated_at': metadata.model_info.created_at,
                             'export_files': metadata.model_info.export_files if hasattr(metadata.model_info, 'export_files') else None,
                             'model_type': metadata.model_info.model_type,
-                            'model_name': None,
+                            'model_name': metadata.model_info.model_name if hasattr(metadata.model_info, 'model_name') else None,
                             # Add comprehensive statistics
                             'comprehensive_stats': {
                                 'training_info': {
