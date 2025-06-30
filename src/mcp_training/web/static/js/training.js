@@ -453,18 +453,29 @@ class TrainingManager {
     
     async viewJobDetails(jobId) {
         try {
-            console.log('Fetching job details for:', jobId);
-            const response = await fetch(`/api/training/jobs/${jobId}`);
-            const job = await response.json();
-            console.log('Job details response:', job);
+            console.log('Getting job details for:', jobId);
             
-            if (response.ok) {
+            // Find the job in the current jobs list instead of making an API call
+            const job = this.jobs.find(j => (j.id || j.training_id) === jobId);
+            
+            if (job) {
+                console.log('Found job in current list:', job);
                 this.showJobDetailsModal(job);
             } else {
-                utils.showError('Failed to load job details', job.error || 'Unknown error');
+                // Fallback to API call if job not found in current list
+                console.log('Job not found in current list, fetching from API...');
+                const response = await fetch(`/api/training/jobs/${jobId}`);
+                const apiJob = await response.json();
+                console.log('Job details from API:', apiJob);
+                
+                if (response.ok) {
+                    this.showJobDetailsModal(apiJob);
+                } else {
+                    utils.showError('Failed to load job details', apiJob.error || 'Unknown error');
+                }
             }
         } catch (error) {
-            console.error('Error fetching job details:', error);
+            console.error('Error getting job details:', error);
             utils.showError('Failed to load job details', error);
         }
     }
@@ -472,6 +483,8 @@ class TrainingManager {
     showJobDetailsModal(job) {
         console.log('Showing job details for:', job);
         console.log('Comprehensive stats:', job.comprehensive_stats);
+        console.log('Job keys:', Object.keys(job));
+        console.log('Job result:', job.result);
         
         const modal = new bootstrap.Modal(document.getElementById('jobDetailsModal'));
         const content = document.getElementById('jobDetailsContent');
@@ -522,6 +535,29 @@ class TrainingManager {
         if (job.comprehensive_stats) {
             console.log('Processing comprehensive stats:', job.comprehensive_stats);
             const stats = job.comprehensive_stats;
+            const trainingInfo = stats.training_info;
+            const evaluationSummary = stats.evaluation_summary;
+            const performanceMetrics = stats.performance_metrics;
+        } else if (job.result) {
+            console.log('Processing result data:', job.result);
+            // Extract data from result field
+            const result = job.result;
+            const evaluationResults = result.evaluation_results || {};
+            
+            // Create comprehensive stats structure from result data
+            const stats = {
+                training_info: {
+                    samples: result.training_samples || 0,
+                    features: result.feature_names ? result.feature_names.length : 0,
+                    feature_names: result.feature_names || [],
+                    duration_seconds: result.training_duration || 0,
+                    export_size_mb: result.export_files_size ? Math.round((result.export_files_size / 1024 / 1024) * 100) / 100 : 0,
+                    model_parameters: result.model_parameters || {}
+                },
+                evaluation_summary: evaluationResults,
+                performance_metrics: evaluationResults.basic_metrics || {}
+            };
+            
             const trainingInfo = stats.training_info;
             const evaluationSummary = stats.evaluation_summary;
             const performanceMetrics = stats.performance_metrics;
@@ -854,9 +890,9 @@ class TrainingManager {
             
             console.log('Making API call to /api/training/exports...');
             
-            // Use a longer timeout specifically for export files
+            // Use a shorter timeout and simpler approach
             const exports = await utils.apiCall('/api/training/exports', {
-                timeout: 30000 // 30 seconds timeout for export files
+                timeout: 10000 // 10 seconds timeout
             });
             
             console.log('Export files loaded:', exports);
@@ -866,11 +902,6 @@ class TrainingManager {
             const select = document.getElementById('exportFiles');
             if (!select) {
                 console.warn('Export files select element not found');
-                // Try again after a short delay
-                setTimeout(() => {
-                    this._loadingExports = false;
-                    this.loadExportFiles();
-                }, 200);
                 return;
             }
             
@@ -925,6 +956,7 @@ class TrainingManager {
                 select.innerHTML = '<option value="">Error loading export files</option>';
             }
         } finally {
+            console.log('Resetting _loadingExports flag to false');
             this._loadingExports = false;
         }
     }
@@ -983,15 +1015,8 @@ class TrainingManager {
             modal.show();
             console.log('Modal shown successfully');
             
-            // Load export files immediately and also after a delay as backup
-            console.log('Loading export files immediately...');
-            this.loadExportFiles();
-            
-            // Also load after a delay as backup
-            setTimeout(() => {
-                console.log('Loading export files (backup)...');
-                this.loadExportFiles();
-            }, 500);
+            // Don't call loadExportFiles here - let the modal event listener handle it
+            console.log('Modal opened successfully - export files will be loaded by event listener');
         } catch (error) {
             console.error('Error showing modal:', error);
             console.error('Error details:', error.toString());
@@ -1414,13 +1439,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Upload button not found during initialization');
         }
         
-        // Test export file loading
-        console.log('Testing export file loading...');
-        window.trainingManager.loadExportFiles().then(() => {
-            console.log('Export files loaded successfully during initialization');
-        }).catch(error => {
-            console.error('Failed to load export files during initialization:', error);
-        });
+        // Don't load export files during initialization - they'll be loaded when modal opens
+        console.log('TrainingManager initialization completed - export files will be loaded when modal opens');
         
     } catch (error) {
         console.error('Failed to initialize TrainingManager:', error);
