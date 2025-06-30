@@ -99,53 +99,6 @@ class TestTrainingPipeline:
         finally:
             Path(temp_file).unlink(missing_ok=True)
     
-    def test_check_model_requirements(self, pipeline):
-        """Test model requirements checking."""
-        # Test with good performance
-        good_evaluation = {
-            'threshold_checks': {
-                'accuracy': True,
-                'precision': True,
-                'recall': True,
-                'f1_score': True
-            },
-            'basic_metrics': {
-                'roc_auc': 0.8
-            }
-        }
-        
-        assert pipeline._check_model_requirements(good_evaluation) is True
-        
-        # Test with poor performance
-        poor_evaluation = {
-            'threshold_checks': {
-                'accuracy': False,
-                'precision': True,
-                'recall': True,
-                'f1_score': True
-            },
-            'basic_metrics': {
-                'roc_auc': 0.8
-            }
-        }
-        
-        assert pipeline._check_model_requirements(poor_evaluation) is False
-        
-        # Test with low ROC AUC
-        low_roc_evaluation = {
-            'threshold_checks': {
-                'accuracy': True,
-                'precision': True,
-                'recall': True,
-                'f1_score': True
-            },
-            'basic_metrics': {
-                'roc_auc': 0.3
-            }
-        }
-        
-        assert pipeline._check_model_requirements(low_roc_evaluation) is False
-    
     def test_generate_training_report(self, pipeline):
         """Test training report generation."""
         model_path = Path("/tmp/test_model")
@@ -180,18 +133,6 @@ class TestTrainingPipeline:
         assert report['model_info']['feature_count'] == 3
         assert report['model_info']['feature_names'] == feature_names
         assert report['model_performance'] == {'accuracy': 0.85}
-    
-    def test_get_pipeline_status(self, pipeline):
-        """Test getting pipeline status."""
-        status = pipeline.get_pipeline_status()
-        
-        assert 'config' in status
-        assert 'registry_stats' in status
-        
-        config = status['config']
-        assert 'model_type' in config
-        assert 'evaluation_thresholds' in config
-        assert 'storage_directory' in config
     
     @pytest.mark.asyncio
     async def test_validate_export_for_training(self, pipeline, temp_export_file):

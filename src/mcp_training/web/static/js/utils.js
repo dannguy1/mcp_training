@@ -2,8 +2,8 @@
  * Utility functions for MCP Training Service UI
  */
 
-// API Base URL - Point to backend server
-const API_BASE = 'http://localhost:8000';
+// API Base URL - Use relative URL to avoid CORS issues
+const API_BASE = '';
 
 /**
  * Make API calls with error handling and timeout - optimized for training system
@@ -98,12 +98,20 @@ const performanceMonitor = {
     }
 };
 
-// Track API calls for performance monitoring
+// Track API calls for performance monitoring (simplified)
+// Temporarily disabled to fix timeout issues
+/*
 const originalApiCall = apiCall;
 apiCall = async function(endpoint, options = {}) {
-    performanceMonitor.trackApiCall();
-    return originalApiCall(endpoint, options);
+    try {
+        performanceMonitor.trackApiCall();
+        return await originalApiCall(endpoint, options);
+    } catch (error) {
+        console.error('API call failed:', endpoint, error);
+        throw error;
+    }
 };
+*/
 
 /**
  * Show notification toast

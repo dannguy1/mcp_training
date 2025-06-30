@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import uuid
 import json
+import numpy as np
 
 from ..core.feature_extractor import WiFiFeatureExtractor
 from ..core.model_trainer import ModelTrainer
@@ -232,65 +233,6 @@ class TrainingService:
             logger.error(f"Error preparing training data: {e}")
             raise
     
-    async def _save_model_with_metadata(self, 
-                                      model: Any, 
-                                      features: Dict[str, Any],
-                                      evaluation_results: Dict[str, Any],
-                                      export_file: str,
-                                      training_id: str,
-                                      model_type: str,
-                                      model_name: Optional[str] = None) -> Path:
-        """Save model with comprehensive metadata."""
-        try:
-            # Generate version
-            version = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # Create model metadata
-            from .metadata import ModelMetadata
-            metadata = ModelMetadata.create(
-                version=version,
-                model_type=model_type,
-                training_samples=len(features),
-                feature_names=list(features.keys()) if features else [],
-                export_files=[export_file],
-                training_id=training_id,
-                model_parameters=self._get_model_parameters(model),
-                model_name=model_name
-            )
-            
-            # Update evaluation results
-            metadata.update_evaluation(evaluation_results)
-            metadata.update_export_file_size(Path(export_file).stat().st_size)
-            
-            # Save model files
-            import joblib
-            import tempfile
-            
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                
-                # Save model
-                model_file = temp_path / "model.joblib"
-                joblib.dump(model, model_file)
-                
-                # Save scaler if available
-                scaler_file = None
-                if hasattr(self.training_pipeline, 'scaler') and self.training_pipeline.scaler:
-                    scaler_file = temp_path / "scaler.joblib"
-                    joblib.dump(self.training_pipeline.scaler, scaler_file)
-                
-                # Save to registry
-                model_path = self.model_registry.save_model(
-                    version, metadata, model_file, scaler_file
-                )
-            
-            logger.info(f"Model saved: {model_path.name}")
-            return model_path
-            
-        except Exception as e:
-            logger.error(f"Error saving model: {e}")
-            raise
-    
     def _get_model_parameters(self, model) -> Dict[str, Any]:
         """Get model parameters."""
         try:
@@ -301,6 +243,8 @@ class TrainingService:
         except Exception as e:
             logger.error(f"Error getting model parameters: {e}")
             return {'model_type': 'unknown'}
+    
+
     
     async def _update_progress(self, training_id: str, progress: int, step: str,
                              error: Optional[str] = None, result: Optional[Dict] = None):

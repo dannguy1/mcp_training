@@ -25,7 +25,7 @@ class TrainingPipeline:
     def __init__(self, config=None):
         """Initialize training pipeline."""
         self.config = config
-        self.scaler = None
+        self.scaler = StandardScaler()  # Initialize scaler
         self.model = None
         self.training_metrics = {}
     
@@ -175,11 +175,26 @@ class TrainingPipeline:
             }
             
             if progress_callback:
+                await progress_callback(40, 'Scaling features')
+            
+            # Step 2.5: Scale features
+            stage_start = time.time()
+            X_scaled = self.scaler.fit_transform(X)
+            stage_duration = time.time() - stage_start
+            
+            pipeline_metrics['stages']['feature_scaling'] = {
+                'duration': stage_duration,
+                'scaler_type': 'StandardScaler',
+                'feature_count': X.shape[1],
+                'memory_usage_mb': psutil.virtual_memory().used / (1024 * 1024)
+            }
+            
+            if progress_callback:
                 await progress_callback(50, 'Training model')
             
             # Step 3: Train model
             stage_start = time.time()
-            model = await self._train_model(X, model_type)
+            model = await self._train_model(X_scaled, model_type)
             stage_duration = time.time() - stage_start
             
             pipeline_metrics['stages']['model_training'] = {
@@ -197,7 +212,7 @@ class TrainingPipeline:
             stage_start = time.time()
             from .evaluation import ModelEvaluator
             evaluator = ModelEvaluator(self.config)
-            evaluation_results = evaluator.evaluate_model(model, X, feature_names)
+            evaluation_results = evaluator.evaluate_model(model, X_scaled, feature_names, X_original=X)
             stage_duration = time.time() - stage_start
             
             pipeline_metrics['stages']['model_evaluation'] = {

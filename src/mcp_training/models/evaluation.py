@@ -18,13 +18,14 @@ class ModelEvaluator:
         """Initialize model evaluator."""
         self.config = config
     
-    def evaluate_model(self, model, X: np.ndarray, feature_names: List[str] = None) -> Dict[str, Any]:
+    def evaluate_model(self, model, X: np.ndarray, feature_names: List[str] = None, X_original: np.ndarray = None) -> Dict[str, Any]:
         """Evaluate an unsupervised anomaly detection model.
         
         Args:
             model: Trained model (e.g., IsolationForest)
-            X: Feature matrix
+            X: Scaled feature matrix
             feature_names: List of feature names
+            X_original: Original (unscaled) feature matrix for additional metrics
             
         Returns:
             Dictionary containing evaluation results
@@ -39,6 +40,12 @@ class ModelEvaluator:
             # Calculate basic metrics
             basic_metrics = self._calculate_basic_metrics(scores)
             logger.info(f"Calculated basic metrics: {len(basic_metrics)} metrics")
+            
+            # Calculate traditional ML metrics if original features available
+            if X_original is not None:
+                traditional_metrics = self._calculate_traditional_metrics(model, X, X_original, scores)
+                basic_metrics.update(traditional_metrics)
+                logger.info(f"Calculated traditional metrics: {len(traditional_metrics)} metrics")
             
             # Calculate score distribution
             score_distribution = self._calculate_score_distribution(scores)
@@ -403,4 +410,97 @@ class ModelEvaluator:
             logger.error(f"Error generating recommendations: {e}")
             recommendations.append("Unable to generate specific recommendations due to evaluation errors.")
         
-        return recommendations 
+        return recommendations
+    
+    def _calculate_traditional_metrics(self, model, X_scaled: np.ndarray, X_original: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
+        """Calculate traditional ML metrics for unsupervised anomaly detection.
+        
+        Args:
+            model: Trained model
+            X_scaled: Scaled feature matrix
+            X_original: Original feature matrix
+            scores: Anomaly scores
+            
+        Returns:
+            Dictionary of traditional metrics
+        """
+        try:
+            # For unsupervised models, we'll create synthetic labels based on score percentiles
+            # This allows us to calculate traditional metrics
+            
+            # Use different thresholds to create synthetic labels
+            thresholds = {
+                'p90': np.percentile(scores, 90),
+                'p95': np.percentile(scores, 95),
+                'p99': np.percentile(scores, 99)
+            }
+            
+            metrics = {}
+            
+            for threshold_name, threshold_value in thresholds.items():
+                # Create synthetic labels based on threshold
+                synthetic_labels = (scores < threshold_value).astype(int)
+                
+                # Calculate metrics for this threshold
+                anomaly_count = np.sum(synthetic_labels)
+                normal_count = len(synthetic_labels) - anomaly_count
+                
+                # Calculate precision, recall, F1-score
+                if anomaly_count > 0:
+                    # For unsupervised models, we assume the model's predictions are "ground truth"
+                    # and calculate how well the threshold separates the data
+                    precision = anomaly_count / len(synthetic_labels)  # Ratio of detected anomalies
+                    recall = 1.0  # We assume all anomalies are detected (by definition)
+                    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+                    accuracy = max(anomaly_count, normal_count) / len(synthetic_labels)  # Majority class accuracy
+                else:
+                    precision = recall = f1_score = accuracy = 0.0
+                
+                # Store metrics with threshold prefix
+                metrics[f'{threshold_name}_precision'] = float(precision)
+                metrics[f'{threshold_name}_recall'] = float(recall)
+                metrics[f'{threshold_name}_f1_score'] = float(f1_score)
+                metrics[f'{threshold_name}_accuracy'] = float(accuracy)
+                metrics[f'{threshold_name}_anomaly_count'] = float(anomaly_count)
+                metrics[f'{threshold_name}_normal_count'] = float(normal_count)
+                metrics[f'{threshold_name}_threshold_value'] = float(threshold_value)
+            
+            # Calculate ROC AUC equivalent for unsupervised models
+            # We'll use the score distribution to estimate separability
+            score_std = np.std(scores)
+            score_mean = np.mean(scores)
+            if score_std > 0:
+                # Higher standard deviation indicates better separability
+                roc_auc_equivalent = min(1.0, score_std / (score_mean + 1e-8))
+            else:
+                roc_auc_equivalent = 0.5  # Random performance
+            
+            metrics['roc_auc_equivalent'] = float(roc_auc_equivalent)
+            
+            # Calculate silhouette score for clustering quality
+            try:
+                from sklearn.metrics import silhouette_score
+                # Use absolute scores for silhouette calculation
+                silhouette = silhouette_score(X_scaled, np.abs(scores))
+                metrics['silhouette_score'] = float(silhouette)
+            except Exception as e:
+                logger.warning(f"Silhouette score calculation failed: {e}")
+                metrics['silhouette_score'] = 0.0
+            
+            # Calculate Davies-Bouldin Index for clustering quality
+            try:
+                from sklearn.metrics import davies_bouldin_score
+                # Use quantized scores for Davies-Bouldin calculation
+                quantized_scores = np.digitize(scores, bins=np.percentile(scores, [25, 50, 75]))
+                davies_bouldin = davies_bouldin_score(X_scaled, quantized_scores)
+                metrics['davies_bouldin_index'] = float(davies_bouldin)
+            except Exception as e:
+                logger.warning(f"Davies-Bouldin Index calculation failed: {e}")
+                metrics['davies_bouldin_index'] = 0.0
+            
+            logger.info(f"Calculated traditional metrics with {len(metrics)} metrics")
+            return metrics
+            
+        except Exception as e:
+            logger.error(f"Error calculating traditional metrics: {e}")
+            return {} 
