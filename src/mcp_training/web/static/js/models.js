@@ -325,13 +325,7 @@ class ModelsManager {
     async deployModel(modelId) {
         try {
             utils.showLoading();
-            
-            await utils.apiCall(`/api/models/${modelId}/deploy`, {
-                method: 'POST',
-                body: JSON.stringify({ deployed_by: 'user' }),
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
+            await utils.apiCall(`/api/models/${modelId}/deploy`, { method: 'POST' });
             utils.showSuccess('Model deployed successfully! Deployment package created.');
             this.loadModels();
         } catch (error) {
