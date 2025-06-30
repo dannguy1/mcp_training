@@ -110,6 +110,16 @@ class TrainingManager {
             });
         }
         
+        // Refresh Export Files button
+        const refreshExportFilesBtn = document.getElementById('refreshExportFilesBtn');
+        console.log('Refresh Export Files button found:', !!refreshExportFilesBtn);
+        if (refreshExportFilesBtn) {
+            refreshExportFilesBtn.addEventListener('click', () => {
+                console.log('Refresh Export Files button clicked');
+                this.loadExportFiles();
+            });
+        }
+        
         // Modal events
         const newTrainingModal = document.getElementById('newTrainingModal');
         if (newTrainingModal) {
@@ -819,24 +829,55 @@ class TrainingManager {
     async loadExportFiles() {
         console.log('TrainingManager.loadExportFiles called');
         try {
+            // Add a small delay to ensure modal is fully rendered
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             const exports = await utils.apiCall('/api/training/exports');
             console.log('Export files loaded:', exports);
+            
             const select = document.getElementById('exportFiles');
             if (!select) {
                 console.warn('Export files select element not found');
+                // Try again after a short delay
+                setTimeout(() => this.loadExportFiles(), 200);
                 return;
             }
+            
+            // Clear existing options
             select.innerHTML = '<option value="">Select export files...</option>';
-            exports.forEach(exportFile => {
+            
+            if (exports && exports.length > 0) {
+                exports.forEach(exportFile => {
+                    const option = document.createElement('option');
+                    option.value = exportFile.path;
+                    option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
+                    select.appendChild(option);
+                });
+                console.log('Export files dropdown updated with', exports.length, 'files');
+                
+                // Enable the submit button if files are available
+                const submitBtn = document.getElementById('submitTrainingBtn');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+            } else {
+                console.log('No export files found');
+                // Add a placeholder option
                 const option = document.createElement('option');
-                option.value = exportFile.path;
-                option.textContent = `${exportFile.filename} (${utils.formatFileSize(exportFile.size)})`;
+                option.value = "";
+                option.textContent = "No export files available";
+                option.disabled = true;
                 select.appendChild(option);
-            });
-            console.log('Export files dropdown updated with', exports.length, 'files');
+            }
         } catch (error) {
             console.error('Error loading export files:', error);
             utils.showError('Failed to load export files', error);
+            
+            // Add error option to dropdown
+            const select = document.getElementById('exportFiles');
+            if (select) {
+                select.innerHTML = '<option value="">Error loading export files</option>';
+            }
         }
     }
     
@@ -866,11 +907,15 @@ class TrainingManager {
             modal.show();
             console.log('Modal shown successfully');
             
-            // Load export files after a short delay to ensure modal is rendered
+            // Load export files immediately and also after a delay as backup
+            console.log('Loading export files immediately...');
+            this.loadExportFiles();
+            
+            // Also load after a delay as backup
             setTimeout(() => {
-                console.log('Loading export files...');
+                console.log('Loading export files (backup)...');
                 this.loadExportFiles();
-            }, 100);
+            }, 500);
         } catch (error) {
             console.error('Error showing modal:', error);
             utils.showError('Failed to show modal: ' + error.message);

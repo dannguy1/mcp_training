@@ -120,10 +120,15 @@
                     
                     <div class="mb-3">
                         <label for="exportFiles" class="form-label">Export Files</label>
-                        <select class="form-select" id="exportFiles" multiple required>
-                            <option value="">Select export files...</option>
-                            <!-- Export files will be populated by JavaScript -->
-                        </select>
+                        <div class="input-group">
+                            <select class="form-select" id="exportFiles" multiple required>
+                                <option value="">Select export files...</option>
+                                <!-- Export files will be populated by JavaScript -->
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" id="refreshExportFilesBtn" title="Refresh export files list">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
                         <div class="form-text">Choose one or more export files from the server's exports directory. Hold Ctrl/Cmd to select multiple files.</div>
                     </div>
                     
