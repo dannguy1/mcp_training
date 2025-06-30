@@ -911,7 +911,7 @@ class MCPTrainingApp {
     
     async downloadModel(modelId) {
         try {
-            const response = await fetch(`${API_BASE}/api/models/${modelId}/download`);
+            const response = await fetch(`/api/models/${modelId}/download`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
