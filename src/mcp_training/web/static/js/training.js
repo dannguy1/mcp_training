@@ -116,7 +116,18 @@ class TrainingManager {
         if (refreshExportFilesBtn) {
             refreshExportFilesBtn.addEventListener('click', () => {
                 console.log('Refresh Export Files button clicked');
-                this.loadExportFiles();
+                
+                // Show loading state on the button
+                const originalHTML = refreshExportFilesBtn.innerHTML;
+                refreshExportFilesBtn.disabled = true;
+                refreshExportFilesBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i>';
+                
+                // Load export files with retry logic
+                this.loadExportFilesWithRetry().finally(() => {
+                    // Restore button state
+                    refreshExportFilesBtn.disabled = false;
+                    refreshExportFilesBtn.innerHTML = originalHTML;
+                });
             });
         }
         
@@ -828,12 +839,26 @@ class TrainingManager {
     
     async loadExportFiles() {
         console.log('TrainingManager.loadExportFiles called');
+        
+        // Prevent multiple concurrent calls
+        if (this._loadingExports) {
+            console.log('Export files already loading, skipping...');
+            return;
+        }
+        
+        this._loadingExports = true;
+        
         try {
             // Add a small delay to ensure modal is fully rendered
             await new Promise(resolve => setTimeout(resolve, 100));
             
             console.log('Making API call to /api/training/exports...');
-            const exports = await utils.apiCall('/api/training/exports');
+            
+            // Use a longer timeout specifically for export files
+            const exports = await utils.apiCall('/api/training/exports', {
+                timeout: 30000 // 30 seconds timeout for export files
+            });
+            
             console.log('Export files loaded:', exports);
             console.log('Export files type:', typeof exports);
             console.log('Export files length:', exports ? exports.length : 'null/undefined');
@@ -842,7 +867,10 @@ class TrainingManager {
             if (!select) {
                 console.warn('Export files select element not found');
                 // Try again after a short delay
-                setTimeout(() => this.loadExportFiles(), 200);
+                setTimeout(() => {
+                    this._loadingExports = false;
+                    this.loadExportFiles();
+                }, 200);
                 return;
             }
             
@@ -878,12 +906,50 @@ class TrainingManager {
         } catch (error) {
             console.error('Error loading export files:', error);
             console.error('Error details:', error.toString());
-            utils.showError('Failed to load export files', error);
+            
+            // Show user-friendly error message
+            let errorMessage = 'Failed to load export files';
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Export files loading timed out. Please try again.';
+            } else if (error.message.includes('network')) {
+                errorMessage = 'Network error. Please check your connection and try again.';
+            } else if (error.message.includes('fetch')) {
+                errorMessage = 'Connection error. Please refresh the page and try again.';
+            }
+            
+            utils.showError(errorMessage, error);
             
             // Add error option to dropdown
             const select = document.getElementById('exportFiles');
             if (select) {
                 select.innerHTML = '<option value="">Error loading export files</option>';
+            }
+        } finally {
+            this._loadingExports = false;
+        }
+    }
+    
+    async loadExportFilesWithRetry(maxRetries = 3) {
+        console.log('TrainingManager.loadExportFilesWithRetry called');
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`Attempt ${attempt} of ${maxRetries} to load export files`);
+                await this.loadExportFiles();
+                console.log(`Successfully loaded export files on attempt ${attempt}`);
+                return; // Success, exit retry loop
+            } catch (error) {
+                console.error(`Attempt ${attempt} failed:`, error);
+                
+                if (attempt === maxRetries) {
+                    console.error('All retry attempts failed');
+                    throw error; // Re-throw the last error
+                }
+                
+                // Wait before retrying (exponential backoff)
+                const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                console.log(`Waiting ${delay}ms before retry...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
