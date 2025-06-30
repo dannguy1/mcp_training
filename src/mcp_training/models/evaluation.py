@@ -71,6 +71,10 @@ class ModelEvaluator:
             recommendations = self._generate_recommendations(basic_metrics, thresholds)
             logger.info(f"Generated {len(recommendations)} recommendations")
             
+            # Calculate model quality metrics
+            quality_metrics = self._calculate_quality_metrics(model, X, scores)
+            logger.info(f"Calculated quality metrics: {len(quality_metrics)} metrics")
+            
             evaluation_results = {
                 'basic_metrics': basic_metrics,
                 'score_distribution': score_distribution,
@@ -78,13 +82,15 @@ class ModelEvaluator:
                 'cross_validation_score': cross_validation_score,
                 'thresholds': thresholds,
                 'recommendations': recommendations,
+                'quality_metrics': quality_metrics,
                 'evaluation_summary': {
                     'total_samples': X.shape[0],
                     'total_features': X.shape[1],
                     'score_range': float(np.max(scores) - np.min(scores)),
                     'score_mean': float(np.mean(scores)),
                     'score_std': float(np.std(scores)),
-                    'evaluation_timestamp': datetime.now().isoformat()
+                    'evaluation_timestamp': datetime.now().isoformat(),
+                    'model_quality_score': self._calculate_overall_quality_score(quality_metrics, basic_metrics)
                 }
             }
             
@@ -104,6 +110,7 @@ class ModelEvaluator:
                 'cross_validation_score': None,
                 'thresholds': {},
                 'recommendations': [],
+                'quality_metrics': {},
                 'error': str(e),
                 'error_type': type(e).__name__,
                 'evaluation_summary': {
@@ -126,11 +133,36 @@ class ModelEvaluator:
                 'anomaly_ratio': 0.1,  # Default contamination
                 'threshold_value': float(np.percentile(scores, 90)),  # 90th percentile
                 'detected_anomalies': float(np.sum(scores < np.percentile(scores, 90))),
-                'total_samples': float(len(scores))
+                'total_samples': float(len(scores)),
+                'score_variance': float(np.var(scores)),
+                'score_skewness': float(self._calculate_skewness(scores)),
+                'score_kurtosis': float(self._calculate_kurtosis(scores))
             }
         except Exception as e:
             logger.error(f"Error calculating basic metrics: {e}")
             return {}
+    
+    def _calculate_skewness(self, scores: np.ndarray) -> float:
+        """Calculate skewness of scores."""
+        try:
+            mean = np.mean(scores)
+            std = np.std(scores)
+            if std == 0:
+                return 0.0
+            return float(np.mean(((scores - mean) / std) ** 3))
+        except:
+            return 0.0
+    
+    def _calculate_kurtosis(self, scores: np.ndarray) -> float:
+        """Calculate kurtosis of scores."""
+        try:
+            mean = np.mean(scores)
+            std = np.std(scores)
+            if std == 0:
+                return 0.0
+            return float(np.mean(((scores - mean) / std) ** 4) - 3)
+        except:
+            return 0.0
     
     def _calculate_score_distribution(self, scores: np.ndarray) -> Dict[str, Any]:
         """Calculate score distribution statistics."""
@@ -142,11 +174,34 @@ class ModelEvaluator:
                     'bins': 20,
                     'counts': np.histogram(scores, bins=20)[0].tolist(),
                     'bin_edges': np.histogram(scores, bins=20)[1].tolist()
-                }
+                },
+                'iqr': float(np.percentile(scores, 75) - np.percentile(scores, 25)),
+                'outliers': self._detect_outliers(scores)
             }
             return distribution
         except Exception as e:
             logger.error(f"Error calculating score distribution: {e}")
+            return {}
+    
+    def _detect_outliers(self, scores: np.ndarray) -> Dict[str, Any]:
+        """Detect outliers in scores using IQR method."""
+        try:
+            q1 = np.percentile(scores, 25)
+            q3 = np.percentile(scores, 75)
+            iqr = q3 - q1
+            lower_bound = q1 - 1.5 * iqr
+            upper_bound = q3 + 1.5 * iqr
+            
+            outliers = scores[(scores < lower_bound) | (scores > upper_bound)]
+            
+            return {
+                'count': int(len(outliers)),
+                'percentage': float(len(outliers) / len(scores) * 100),
+                'lower_bound': float(lower_bound),
+                'upper_bound': float(upper_bound)
+            }
+        except Exception as e:
+            logger.error(f"Error detecting outliers: {e}")
             return {}
     
     def _calculate_feature_importance(self, model, X: np.ndarray, feature_names: List[str] = None) -> Dict[str, float]:
@@ -174,10 +229,6 @@ class ModelEvaluator:
     def _calculate_permutation_importance(self, model, X: np.ndarray) -> np.ndarray:
         """Calculate permutation importance for unsupervised models."""
         try:
-            # For unsupervised models, we can't use standard permutation importance
-            # Instead, we'll calculate feature importance based on how much the model's
-            # predictions change when we shuffle each feature
-            
             # Use a small sample for efficiency
             sample_size = min(1000, X.shape[0])
             sample_indices = np.random.choice(X.shape[0], sample_size, replace=False)
@@ -197,7 +248,6 @@ class ModelEvaluator:
                 shuffled_scores = model.score_samples(X_shuffled)
                 
                 # Calculate importance as the difference in score variance
-                # Higher difference means the feature is more important
                 baseline_var = np.var(baseline_scores)
                 shuffled_var = np.var(shuffled_scores)
                 importance = abs(baseline_var - shuffled_var)
@@ -220,30 +270,23 @@ class ModelEvaluator:
         try:
             from sklearn.model_selection import cross_val_score
             
-            # Use silhouette score as a proxy for model quality
+            # Custom scoring function for unsupervised learning
             def scoring_function(estimator, X, y=None):
                 try:
                     scores = estimator.score_samples(X)
-                    # Convert scores to cluster labels for silhouette calculation
-                    # Use percentile-based clustering
-                    threshold = np.percentile(scores, 90)
-                    labels = (scores < threshold).astype(int)
-                    if len(np.unique(labels)) > 1:
-                        return silhouette_score(X, labels)
-                    else:
-                        return 0.0
+                    # Use negative mean absolute deviation as scoring
+                    return -np.mean(np.abs(scores - np.mean(scores)))
                 except:
                     return 0.0
             
-            cv_scores = cross_val_score(
-                model, X,
-                scoring=scoring_function,
-                cv=5,
-                n_jobs=-1
-            )
+            # Perform cross-validation
+            cv_scores = cross_val_score(model, X, scoring=scoring_function, cv=5)
             
-            return float(np.mean(cv_scores))
-            
+            if len(cv_scores) > 0:
+                return float(np.mean(cv_scores))
+            else:
+                return None
+                
         except Exception as e:
             logger.error(f"Error calculating cross-validation score: {e}")
             return None
@@ -252,15 +295,84 @@ class ModelEvaluator:
         """Calculate various threshold values for anomaly detection."""
         try:
             return {
-                'conservative': float(np.percentile(scores, 95)),  # 95th percentile
-                'moderate': float(np.percentile(scores, 90)),      # 90th percentile
-                'aggressive': float(np.percentile(scores, 85)),    # 85th percentile
+                'p90_threshold': float(np.percentile(scores, 90)),
+                'p95_threshold': float(np.percentile(scores, 95)),
+                'p99_threshold': float(np.percentile(scores, 99)),
                 'mean_plus_2std': float(np.mean(scores) + 2 * np.std(scores)),
-                'mean_plus_3std': float(np.mean(scores) + 3 * np.std(scores))
+                'mean_plus_3std': float(np.mean(scores) + 3 * np.std(scores)),
+                'iqr_upper': float(np.percentile(scores, 75) + 1.5 * (np.percentile(scores, 75) - np.percentile(scores, 25)))
             }
         except Exception as e:
             logger.error(f"Error calculating thresholds: {e}")
             return {}
+    
+    def _calculate_quality_metrics(self, model, X: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
+        """Calculate model quality metrics."""
+        try:
+            # Calculate silhouette score if possible
+            try:
+                # For anomaly detection, we can use the scores to create clusters
+                # Use percentile-based clustering
+                threshold = np.percentile(scores, 90)
+                labels = (scores < threshold).astype(int)
+                silhouette = silhouette_score(X, labels) if len(np.unique(labels)) > 1 else 0.0
+            except:
+                silhouette = 0.0
+            
+            # Calculate score stability
+            score_stability = 1.0 - (np.std(scores) / (np.max(scores) - np.min(scores) + 1e-8))
+            
+            # Calculate feature utilization
+            if hasattr(model, 'feature_importances_'):
+                feature_utilization = np.sum(model.feature_importances_ > 0.01) / len(model.feature_importances_)
+            else:
+                feature_utilization = 1.0
+            
+            return {
+                'silhouette_score': float(silhouette),
+                'score_stability': float(score_stability),
+                'feature_utilization': float(feature_utilization),
+                'score_diversity': float(np.std(scores)),
+                'model_complexity': float(X.shape[1])  # Number of features
+            }
+        except Exception as e:
+            logger.error(f"Error calculating quality metrics: {e}")
+            return {}
+    
+    def _calculate_overall_quality_score(self, quality_metrics: Dict[str, float], basic_metrics: Dict[str, float]) -> float:
+        """Calculate overall model quality score."""
+        try:
+            scores = []
+            
+            # Silhouette score (0-1, higher is better)
+            if 'silhouette_score' in quality_metrics:
+                scores.append(quality_metrics['silhouette_score'])
+            
+            # Score stability (0-1, higher is better)
+            if 'score_stability' in quality_metrics:
+                scores.append(quality_metrics['score_stability'])
+            
+            # Feature utilization (0-1, higher is better)
+            if 'feature_utilization' in quality_metrics:
+                scores.append(quality_metrics['feature_utilization'])
+            
+            # Score diversity (normalized, moderate is better)
+            if 'score_diversity' in quality_metrics and 'score_range' in basic_metrics:
+                diversity_ratio = quality_metrics['score_diversity'] / (basic_metrics['score_range'] + 1e-8)
+                # Penalize very low or very high diversity
+                if diversity_ratio < 0.1 or diversity_ratio > 0.9:
+                    scores.append(0.5)
+                else:
+                    scores.append(1.0)
+            
+            if scores:
+                return float(np.mean(scores))
+            else:
+                return 0.5  # Default neutral score
+                
+        except Exception as e:
+            logger.error(f"Error calculating overall quality score: {e}")
+            return 0.5
     
     def _generate_recommendations(self, metrics: Dict[str, float], thresholds: Dict[str, float]) -> List[str]:
         """Generate recommendations based on evaluation results."""
@@ -268,25 +380,27 @@ class ModelEvaluator:
         
         try:
             # Check score distribution
-            if metrics.get('score_std', 0) < 0.01:
-                recommendations.append("Low score variance detected. Consider feature engineering or different model parameters.")
+            if 'score_std' in metrics and metrics['score_std'] < 0.01:
+                recommendations.append("Low score variance detected. Consider using more diverse features or adjusting model parameters.")
             
-            if metrics.get('score_range', 0) < 0.1:
-                recommendations.append("Limited score range. Model may not be discriminating well between normal and anomalous patterns.")
+            # Check anomaly ratio
+            if 'anomaly_ratio' in metrics and metrics['anomaly_ratio'] > 0.2:
+                recommendations.append("High anomaly ratio detected. Consider adjusting contamination parameter or reviewing data quality.")
             
-            # Check threshold recommendations
-            if thresholds.get('moderate', 0) > 0.8:
-                recommendations.append("High threshold detected. Consider lowering contamination parameter for more sensitive detection.")
+            # Check feature utilization
+            if 'feature_utilization' in metrics and metrics['feature_utilization'] < 0.5:
+                recommendations.append("Low feature utilization detected. Consider feature selection or engineering additional features.")
             
-            if metrics.get('detected_anomalies', 0) < 1:
-                recommendations.append("No anomalies detected. Consider adjusting contamination parameter or feature selection.")
+            # Check score stability
+            if 'score_stability' in metrics and metrics['score_stability'] < 0.7:
+                recommendations.append("Low score stability detected. Model may be sensitive to data variations.")
             
-            # General recommendations
-            recommendations.append("Monitor model performance over time and retrain with new data periodically.")
-            recommendations.append("Consider ensemble methods for improved robustness.")
+            # Add general recommendations
+            if len(recommendations) == 0:
+                recommendations.append("Model evaluation completed successfully. Consider monitoring performance on new data.")
             
         except Exception as e:
             logger.error(f"Error generating recommendations: {e}")
-            recommendations.append("Unable to generate recommendations due to evaluation errors.")
+            recommendations.append("Unable to generate specific recommendations due to evaluation errors.")
         
         return recommendations 

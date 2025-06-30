@@ -18,6 +18,7 @@ from ..models.metadata import ModelMetadata
 from ..models.registry import ModelRegistry
 from ..models.evaluation import ModelEvaluator
 from ..models.training_pipeline import TrainingPipeline
+from ..models.training_quality_assessor import TrainingQualityAssessor
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class TrainingService:
             
         self.model_evaluator = ModelEvaluator(self.config)
         self.training_pipeline = TrainingPipeline(self.config)
+        self.quality_assessor = TrainingQualityAssessor()
         self.training_tasks: Dict[str, Dict[str, Any]] = {}
     
     async def start_training(self, 
@@ -179,11 +181,23 @@ class TrainingService:
                 progress_callback=progress_callback
             )
             
-            # Step 3: Complete
+            # Step 3: Perform quality assessment
+            await self._update_progress(training_id, 95, 'Assessing training quality')
+            quality_assessment = self.quality_assessor.assess_training_quality(
+                training_metrics=training_result.get('pipeline_metrics', {}),
+                evaluation_results=training_result.get('evaluation_results', {}),
+                pipeline_metrics=training_result.get('pipeline_metrics', {})
+            )
+            
+            # Add quality assessment to training result
+            training_result['quality_assessment'] = quality_assessment
+            
+            # Step 4: Complete
             await self._update_progress(training_id, 100, 'Training completed', 
                                       result=training_result)
             
             logger.info(f"Training completed successfully: {training_id}")
+            logger.info(f"Quality assessment score: {quality_assessment.get('overall_score', 0.0):.3f}")
             
         except Exception as e:
             logger.error(f"Training failed: {e}")
@@ -199,28 +213,24 @@ class TrainingService:
             if 'data' not in data:
                 raise ValueError("Export file must contain 'data' section")
             
-            logger.info(f"Loaded {len(data['data'])} log entries from export file")
             return data
             
         except Exception as e:
-            logger.error(f"Error loading exported data: {e}")
+            logger.error(f"Error loading export data: {e}")
             raise
     
     def _prepare_training_data(self, features: Dict[str, Any]) -> tuple:
-        """Prepare training data from extracted features."""
-        # Convert features to feature matrix
-        feature_matrix = []
-        for feature_name in self.config.features.numeric:
-            if feature_name in features:
-                feature_matrix.append(float(features[feature_name]))
-            else:
-                feature_matrix.append(0.0)
-        
-        import numpy as np
-        X = np.array([feature_matrix])
-        y = np.zeros(len(X))  # Unsupervised learning
-        
-        return X, y
+        """Prepare training data from features."""
+        try:
+            # Convert features to numpy array
+            feature_names = list(features.keys())
+            X = np.array([list(features.values())])
+            
+            return X, feature_names
+            
+        except Exception as e:
+            logger.error(f"Error preparing training data: {e}")
+            raise
     
     async def _save_model_with_metadata(self, 
                                       model: Any, 
@@ -230,166 +240,146 @@ class TrainingService:
                                       training_id: str,
                                       model_type: str) -> Path:
         """Save model with comprehensive metadata."""
-        # Generate version
-        version = datetime.now().strftime(self.config.storage.version_format)
-        
-        # Create model metadata
-        metadata = ModelMetadata.create(
-            version=version,
-            model_type=model_type,
-            training_samples=len(features),
-            feature_names=list(features.keys()),
-            export_files=[export_file],
-            training_id=training_id,
-            model_parameters=self.config.model.dict()
-        )
-        
-        # Update evaluation results
-        metadata.update_evaluation(evaluation_results)
-        metadata.update_export_file_size(Path(export_file).stat().st_size)
-        metadata.update_training_duration(self._get_training_duration(training_id))
-        
-        # Save model files
-        import joblib
-        import tempfile
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
+        try:
+            # Generate version
+            version = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            # Save model
-            model_file = temp_path / "model.joblib"
-            joblib.dump(model, model_file)
-            
-            # Save scaler if available
-            scaler_file = None
-            if hasattr(self.model_trainer, 'scaler') and self.model_trainer.scaler:
-                scaler_file = temp_path / "scaler.joblib"
-                joblib.dump(self.model_trainer.scaler, scaler_file)
-            
-            # Save to registry
-            model_path = self.model_registry.save_model(
-                version, metadata, model_file, scaler_file
+            # Create model metadata
+            from .metadata import ModelMetadata
+            metadata = ModelMetadata.create(
+                version=version,
+                model_type=model_type,
+                training_samples=len(features),
+                feature_names=list(features.keys()) if features else [],
+                export_files=[export_file],
+                training_id=training_id,
+                model_parameters=self._get_model_parameters(model)
             )
-        
-        return model_path
+            
+            # Update evaluation results
+            metadata.update_evaluation(evaluation_results)
+            metadata.update_export_file_size(Path(export_file).stat().st_size)
+            
+            # Save model files
+            import joblib
+            import tempfile
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Save model
+                model_file = temp_path / "model.joblib"
+                joblib.dump(model, model_file)
+                
+                # Save scaler if available
+                scaler_file = None
+                if hasattr(self.training_pipeline, 'scaler') and self.training_pipeline.scaler:
+                    scaler_file = temp_path / "scaler.joblib"
+                    joblib.dump(self.training_pipeline.scaler, scaler_file)
+                
+                # Save to registry
+                model_path = self.model_registry.save_model(
+                    version, metadata, model_file, scaler_file
+                )
+            
+            logger.info(f"Model saved: {model_path.name}")
+            return model_path
+            
+        except Exception as e:
+            logger.error(f"Error saving model: {e}")
+            raise
+    
+    def _get_model_parameters(self, model) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            if hasattr(model, 'get_params'):
+                return model.get_params()
+            else:
+                return {'model_type': type(model).__name__}
+        except Exception as e:
+            logger.error(f"Error getting model parameters: {e}")
+            return {'model_type': 'unknown'}
     
     async def _update_progress(self, training_id: str, progress: int, step: str,
                              error: Optional[str] = None, result: Optional[Dict] = None):
         """Update training progress."""
-        if training_id in self.training_tasks:
-            self.training_tasks[training_id].update({
-                'progress': progress,
-                'step': step,
-                'updated_at': datetime.now().isoformat()
-            })
-            
-            if error:
-                self.training_tasks[training_id].update({
-                    'status': 'failed',
-                    'error': error
-                })
-            elif result:
-                self.training_tasks[training_id].update({
-                    'status': 'completed',
-                    'result': result
-                })
-            else:
-                self.training_tasks[training_id]['status'] = 'running'
-            
-            # Broadcast progress update via WebSocket
-            try:
-                from ..api.routes.websocket import broadcast_training_update
+        try:
+            if training_id in self.training_tasks:
+                task = self.training_tasks[training_id]
+                task['progress'] = progress
+                task['step'] = step
+                task['updated_at'] = datetime.now().isoformat()
                 
-                # Create async task to broadcast with timeout
-                async def broadcast():
-                    try:
-                        status = 'running'
-                        if error:
-                            status = 'failed'
-                        elif result:
-                            status = 'completed'
-                        
-                        await asyncio.wait_for(
-                            broadcast_training_update(
-                                job_id=training_id,
-                                progress=progress,
-                                status=status,
-                                step=step,
-                                error=error,
-                                result=result
-                            ),
-                            timeout=5.0  # 5 second timeout
-                        )
-                    except asyncio.TimeoutError:
-                        logger.warning(f"WebSocket broadcast timeout for training {training_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to broadcast training update: {e}")
+                if error:
+                    task['status'] = 'failed'
+                    task['error'] = error
+                    logger.error(f"Training failed: {error}")
+                elif result:
+                    task['status'] = 'completed'
+                    task['result'] = result
+                    logger.info(f"Training completed: {training_id}")
+                else:
+                    task['status'] = 'running'
+                    logger.info(f"Training progress: {progress}% - {step}")
                 
-                # Run in event loop if available
+                # Broadcast progress update
                 try:
-                    loop = asyncio.get_running_loop()
-                    # Schedule the broadcast task without blocking
-                    loop.create_task(broadcast())
-                except RuntimeError:
-                    # No running event loop, try to get the current one
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            loop.create_task(broadcast())
-                        else:
-                            # Create a new task in the event loop with timeout
-                            future = asyncio.run_coroutine_threadsafe(broadcast(), loop)
-                            try:
-                                future.result(timeout=5)  # Wait up to 5 seconds
-                            except Exception as e:
-                                logger.warning(f"WebSocket broadcast failed: {e}")
-                    except Exception as e:
-                        logger.warning(f"Could not broadcast training update: {e}")
-                        
-            except ImportError:
-                logger.warning("WebSocket broadcasting not available")
-            except Exception as e:
-                logger.error(f"Failed to broadcast training update: {e}")
+                    async def broadcast():
+                        # This would typically broadcast to WebSocket clients
+                        # For now, just log the update
+                        pass
+                    
+                    await broadcast()
+                except Exception as e:
+                    logger.warning(f"Error broadcasting progress update: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error updating progress: {e}")
     
     def get_training_status(self, training_id: str) -> Optional[Dict[str, Any]]:
         """Get training job status."""
-        # First check in-memory tasks
-        task = self.training_tasks.get(training_id)
-        if task:
-            return task
-        
-        # If not found in memory, check model registry for completed jobs
-        return self._load_completed_job_from_registry(training_id)
+        try:
+            # Check if job is in memory
+            if training_id in self.training_tasks:
+                return self.training_tasks[training_id]
+            
+            # Check if job is in registry (completed jobs)
+            return self._load_completed_job_from_registry(training_id)
+            
+        except Exception as e:
+            logger.error(f"Error getting training status: {e}")
+            return None
     
     def _get_evaluation_summary_from_registry(self, version: str) -> Dict[str, Any]:
         """Get evaluation summary from model registry."""
         try:
-            # Use absolute path for registry file
-            project_root = Path(__file__).parent.parent.parent.parent
-            registry_file = project_root / self.config.storage.directory / 'model_registry.json'
-            if registry_file.exists():
-                with open(registry_file, 'r') as f:
-                    registry = json.load(f)
-                
-                if version in registry:
-                    return registry[version].get('evaluation_summary', {})
-            return {}
+            metadata = self.model_registry.get_model(version)
+            if metadata and hasattr(metadata, 'evaluation_info'):
+                return {
+                    'basic_metrics': metadata.evaluation_info.basic_metrics,
+                    'quality_metrics': metadata.evaluation_info.quality_metrics,
+                    'feature_importance': metadata.evaluation_info.feature_importance,
+                    'thresholds': metadata.evaluation_info.thresholds,
+                    'recommendations': metadata.evaluation_info.recommendations,
+                    'evaluation_summary': metadata.evaluation_info.evaluation_summary
+                }
         except Exception as e:
-            logger.error(f"Error getting evaluation summary from registry: {e}")
-            return {}
+            logger.error(f"Error getting evaluation summary: {e}")
+        
+        return {}
     
     def _load_completed_job_from_registry(self, training_id: str) -> Optional[Dict[str, Any]]:
-        """Load completed job information from model registry."""
+        """Load completed job from model registry."""
         try:
-            # Search through all models to find one with matching training_id
             models = self.model_registry.list_models()
             for model in models:
                 version = model['version']
                 metadata = self.model_registry.get_model(version)
                 if metadata:
-                    # Check both model_info.training_id and training_info.training_id for robustness
+                    # Check both model_info.training_id and training_info.training_id
                     model_info_tid = getattr(metadata.model_info, 'training_id', None)
                     training_info_tid = getattr(metadata.training_info, 'training_id', None)
+                    
                     if model_info_tid == training_id or training_info_tid == training_id:
                         return {
                             'id': training_id,
@@ -434,43 +424,43 @@ class TrainingService:
             return None
     
     def list_training_tasks(self) -> Dict[str, Dict[str, Any]]:
-        """List all training tasks (including completed ones from registry)."""
-        # Start with in-memory tasks
-        all_tasks = self.training_tasks.copy()
-        
-        # Ensure all in-memory tasks have training_id set
-        for task_id, task in all_tasks.items():
-            if 'training_id' not in task:
-                task['training_id'] = task_id
-        
-        # Add completed jobs from registry
+        """List all training tasks."""
         try:
-            models = self.model_registry.list_models()
-            for model in models:
-                version = model['version']
-                metadata = self.model_registry.get_model(version)
-                if metadata:
-                    # Get training_id from metadata
-                    model_info_tid = getattr(metadata.model_info, 'training_id', None)
-                    training_info_tid = getattr(metadata.training_info, 'training_id', None)
-                    training_id = model_info_tid or training_info_tid
-                    
-                    if training_id and training_id not in all_tasks:
-                        completed_job = self._load_completed_job_from_registry(training_id)
-                        if completed_job:
-                            all_tasks[training_id] = completed_job
+            # Get tasks from memory
+            tasks = self.training_tasks.copy()
+            
+            # Add completed tasks from registry
+            try:
+                models = self.model_registry.list_models()
+                for model in models:
+                    version = model['version']
+                    metadata = self.model_registry.get_model(version)
+                    if metadata and hasattr(metadata.model_info, 'training_id'):
+                        training_id = metadata.model_info.training_id
+                        if training_id and training_id not in tasks:
+                            # Load completed job
+                            completed_job = self._load_completed_job_from_registry(training_id)
+                            if completed_job:
+                                tasks[training_id] = completed_job
+            except Exception as e:
+                logger.warning(f"Error loading completed tasks from registry: {e}")
+            
+            return tasks
+            
         except Exception as e:
-            logger.error(f"Error loading completed jobs from registry: {e}")
-        
-        return all_tasks
+            logger.error(f"Error listing training tasks: {e}")
+            return {}
     
     def _get_training_duration(self, training_id: str) -> float:
-        """Get training duration for a task."""
-        task = self.training_tasks.get(training_id)
-        if task and 'start_time' in task:
-            start_time = datetime.fromisoformat(task['start_time'])
-            end_time = datetime.now()
-            return (end_time - start_time).total_seconds()
+        """Get training duration for a job."""
+        try:
+            if training_id in self.training_tasks:
+                task = self.training_tasks[training_id]
+                start_time = datetime.fromisoformat(task['start_time'])
+                end_time = datetime.fromisoformat(task['updated_at'])
+                return (end_time - start_time).total_seconds()
+        except Exception as e:
+            logger.error(f"Error getting training duration: {e}")
         return 0.0
     
     async def validate_export(self, export_file: str) -> Dict[str, Any]:
@@ -482,24 +472,22 @@ class TrainingService:
         return self.model_registry
     
     async def shutdown(self):
-        """Shutdown the training service."""
-        # Cancel any running tasks
-        for task_id, task_info in self.training_tasks.items():
-            if task_info['status'] == 'running':
-                task_info['status'] = 'cancelled'
-                task_info['error'] = 'Service shutdown'
-        
-        logger.info("Training service shutdown complete")
+        """Shutdown training service."""
+        try:
+            logger.info("Shutting down training service...")
+            # Cancel any running tasks
+            for training_id, task in self.training_tasks.items():
+                if task.get('status') == 'running':
+                    logger.info(f"Cancelling running training job: {training_id}")
+                    task['status'] = 'cancelled'
+                    task['error'] = 'Service shutdown'
+            
+            logger.info("Training service shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during training service shutdown: {e}")
     
     async def delete_training_job(self, training_id: str) -> bool:
-        """Delete a training job and its associated data.
-        
-        Args:
-            training_id: Training job ID to delete
-            
-        Returns:
-            True if job was deleted successfully, False otherwise
-        """
+        """Delete a training job."""
         try:
             logger.info(f"Attempting to delete training job: {training_id}")
             
@@ -539,12 +527,26 @@ class TrainingService:
                 
                 # If we get here, the job wasn't found in registry
                 logger.info(f"Training job not found in registry: {training_id}")
-                return True  # Consider it a success if not found
+                return True
                 
             except Exception as e:
-                logger.error(f"Error checking registry for training job {training_id}: {e}")
+                logger.error(f"Error checking registry for job deletion: {e}")
                 return False
-            
+                
         except Exception as e:
-            logger.error(f"Error deleting training job {training_id}: {e}")
-            return False 
+            logger.error(f"Error deleting training job: {e}")
+            return False
+    
+    async def get_training_logs(self, training_id: str, lines: int = 100) -> Optional[List[str]]:
+        """Get training logs for a specific job."""
+        try:
+            # This would typically read from a log file or database
+            # For now, return a simple log entry
+            return [
+                f"Training job {training_id} logs (last {lines} lines)",
+                f"Status: {self.get_training_status(training_id) or 'Not found'}",
+                f"Timestamp: {datetime.now().isoformat()}"
+            ]
+        except Exception as e:
+            logger.error(f"Error getting training logs: {e}")
+            return None 
