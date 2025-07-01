@@ -592,7 +592,7 @@ class TrainingPipeline:
                 X = np.zeros((1, 1))
             
             # Use multi-algorithm selector to choose best algorithm
-            if model_type == "auto" or model_type == "auto_select":
+            if model_type == "auto" or model_type == "auto_select" or model_type == "default":
                 selected_algorithm, parameters = self.algorithm_selector.select_best_algorithm(X)
                 logger.info(f"Auto-selected algorithm: {selected_algorithm}")
                 logger.info(f"Selection reason: {self.algorithm_selector.selection_reason}")
@@ -700,10 +700,16 @@ class TrainingPipeline:
                 export_files=[export_file]
             )
             
+            # Get feature names and count
+            feature_names = list(evaluation_results.get('feature_importance', {}).keys())
+            if not feature_names:
+                # Fallback: use feature names from training metrics
+                feature_names = self.training_metrics.get('stages', {}).get('feature_extraction', {}).get('feature_names', [])
+            
             training_info = TrainingInfo(
                 training_samples=len(features_data),
-                feature_names=list(evaluation_results.get('feature_importance', {}).keys()),
-                feature_count=len(evaluation_results.get('feature_importance', {})),
+                feature_names=feature_names,
+                feature_count=len(feature_names),
                 training_duration=0.0,  # Will be set by training service
                 export_files_size=Path(export_file).stat().st_size,
                 model_parameters=self._get_model_parameters(model),

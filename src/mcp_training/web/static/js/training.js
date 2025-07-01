@@ -384,7 +384,8 @@ class TrainingManager {
             
             const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
-                body: JSON.stringify(requestData)
+                body: JSON.stringify(requestData),
+                timeout: 45000 // 45 seconds timeout for training job creation
             });
             
             utils.showSuccess('Training job started successfully');
@@ -890,9 +891,9 @@ class TrainingManager {
             
             console.log('Making API call to /api/training/exports...');
             
-            // Use a shorter timeout and simpler approach
+            // Use a longer timeout for training operations
             const exports = await utils.apiCall('/api/training/exports', {
-                timeout: 10000 // 10 seconds timeout
+                timeout: 15000 // 15 seconds timeout
             });
             
             console.log('Export files loaded:', exports);

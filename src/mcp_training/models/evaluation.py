@@ -593,9 +593,17 @@ class ModelEvaluator:
             # Calculate silhouette score for clustering quality
             try:
                 from sklearn.metrics import silhouette_score
-                # Use absolute scores for silhouette calculation
-                silhouette = silhouette_score(X_scaled, np.abs(scores))
-                metrics['silhouette_score'] = float(silhouette)
+                # Create discrete labels from scores using percentiles
+                score_percentiles = np.percentile(scores, [25, 50, 75])
+                discrete_labels = np.digitize(scores, bins=score_percentiles)
+                # Ensure we have at least 2 clusters and not more than n_samples-1
+                unique_labels = np.unique(discrete_labels)
+                if len(unique_labels) >= 2 and len(unique_labels) < len(scores):
+                    silhouette = silhouette_score(X_scaled, discrete_labels)
+                    metrics['silhouette_score'] = float(silhouette)
+                else:
+                    logger.warning("Insufficient clusters for silhouette score calculation")
+                    metrics['silhouette_score'] = 0.0
             except Exception as e:
                 logger.warning(f"Silhouette score calculation failed: {e}")
                 metrics['silhouette_score'] = 0.0

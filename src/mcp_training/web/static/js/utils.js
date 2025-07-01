@@ -18,8 +18,8 @@ async function apiCall(endpoint, options = {}) {
         ...options
     };
 
-    // Add timeout to prevent hanging requests - shorter for training system
-    const timeout = options.timeout || 15000; // 15 second default timeout (reduced from 30)
+    // Add timeout to prevent hanging requests - increased for training system
+    const timeout = options.timeout || 30000; // 30 second default timeout (increased from 15)
     
     try {
         // Create abort controller for timeout

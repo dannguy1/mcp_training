@@ -56,70 +56,7 @@ class TrainingService:
                            model_name: Optional[str] = None,
                            config_overrides: Optional[Dict[str, Any]] = None) -> str:
         """Start a training job with multiple export files."""
-        # Check for duplicate requests - if same export files are already being processed or were recently completed
-        for existing_id, existing_task in self.training_tasks.items():
-            if existing_task.get('export_files') == export_files:
-                # Check if job is currently running or was completed very recently (within last 30 seconds)
-                if existing_task.get('status') in ['initializing', 'running']:
-                    logger.info(f"Duplicate training request detected for running job: {existing_id}")
-                    logger.info(f"Export files: {export_files}")
-                    logger.info(f"Current status: {existing_task.get('status')}")
-                    logger.info(f"Current progress: {existing_task.get('progress', 0)}%")
-                    logger.info(f"Returning existing training ID: {existing_id}")
-                    return existing_id
-                elif existing_task.get('status') == 'completed':
-                    # Check if job was completed very recently (within last 30 seconds)
-                    if 'updated_at' in existing_task:
-                        try:
-                            if isinstance(existing_task['updated_at'], str):
-                                completed_time = datetime.fromisoformat(existing_task['updated_at'])
-                            else:
-                                completed_time = existing_task['updated_at']
-                            
-                            time_since_completion = (datetime.now() - completed_time).total_seconds()
-                            if time_since_completion < 30:  # 30 seconds threshold
-                                logger.info(f"Duplicate training request detected for recently completed job: {existing_id}")
-                                logger.info(f"Completed {time_since_completion:.1f} seconds ago")
-                                logger.info(f"Returning existing training ID: {existing_id}")
-                                return existing_id
-                            else:
-                                logger.info(f"Previous job completed {time_since_completion:.1f} seconds ago, starting new job")
-                        except Exception as e:
-                            logger.warning(f"Error checking completion time for job {existing_id}: {e}")
-        
-        # Also check model registry for recently completed jobs with same export files
-        try:
-            models = self.model_registry.list_models()
-            for model in models:
-                version = model['version']
-                metadata = self.model_registry.get_model(version)
-                if metadata and hasattr(metadata.model_info, 'export_files'):
-                    if metadata.model_info.export_files == export_files:
-                        # Check if model was created very recently (within last 30 seconds)
-                        if hasattr(metadata.model_info, 'created_at'):
-                            try:
-                                if isinstance(metadata.model_info.created_at, str):
-                                    created_time = datetime.fromisoformat(metadata.model_info.created_at)
-                                else:
-                                    created_time = metadata.model_info.created_at
-                                
-                                time_since_creation = (datetime.now() - created_time).total_seconds()
-                                if time_since_creation < 30:  # 30 seconds threshold
-                                    logger.info(f"Duplicate training request detected for recently created model: {version}")
-                                    logger.info(f"Model created {time_since_creation:.1f} seconds ago")
-                                    # Return the training_id from the existing model
-                                    training_id = getattr(metadata.model_info, 'training_id', None)
-                                    if training_id:
-                                        logger.info(f"Returning existing training ID: {training_id}")
-                                        return training_id
-                                else:
-                                    logger.info(f"Previous model created {time_since_creation:.1f} seconds ago, starting new job")
-                            except Exception as e:
-                                logger.warning(f"Error checking creation time for model {version}: {e}")
-        except Exception as e:
-            logger.warning(f"Error checking model registry for duplicates: {e}")
-        
-        # Create new training job
+        # Create new training job immediately to avoid timeout
         training_id = str(uuid.uuid4())
         logger.info(f"Creating new training job: {training_id}")
         logger.info(f"Export files: {export_files}")
@@ -132,7 +69,7 @@ class TrainingService:
             'training_id': training_id,  # Ensure training_id is explicitly set
             'status': 'initializing',
             'progress': 0,
-            'step': 'Validating export data',
+            'step': 'Checking for duplicates and validating data',
             'error': None,
             'result': None,
             'start_time': datetime.now().isoformat(),
@@ -143,7 +80,7 @@ class TrainingService:
             'config_overrides': config_overrides
         }
         
-        # Start training in background
+        # Start training in background (duplicate checking moved to background)
         asyncio.create_task(self._run_training_task(
             training_id, export_files, model_type, model_name, config_overrides
         ))
@@ -163,7 +100,88 @@ class TrainingService:
             async def progress_callback(progress: int, step: str):
                 await self._update_progress(training_id, progress, step)
             
-            # Step 1: Validate export data
+            # Step 1: Check for duplicate requests (moved from start_training to avoid timeout)
+            await self._update_progress(training_id, 2, 'Checking for duplicate requests')
+            
+            # Check for duplicate requests - if same export files are already being processed or were recently completed
+            for existing_id, existing_task in self.training_tasks.items():
+                if existing_id == training_id:
+                    continue  # Skip self
+                    
+                if existing_task.get('export_files') == export_files:
+                    # Check if job is currently running or was completed very recently (within last 30 seconds)
+                    if existing_task.get('status') in ['initializing', 'running']:
+                        logger.info(f"Duplicate training request detected for running job: {existing_id}")
+                        logger.info(f"Export files: {export_files}")
+                        logger.info(f"Current status: {existing_task.get('status')}")
+                        logger.info(f"Current progress: {existing_task.get('progress', 0)}%")
+                        logger.info(f"Marking current job as duplicate and returning existing ID: {existing_id}")
+                        
+                        # Update current job to indicate it's a duplicate
+                        await self._update_progress(training_id, 100, 'Duplicate job detected - using existing job', 
+                                                  result={'duplicate_of': existing_id, 'status': 'duplicate'})
+                        return
+                    elif existing_task.get('status') == 'completed':
+                        # Check if job was completed very recently (within last 30 seconds)
+                        if 'updated_at' in existing_task:
+                            try:
+                                if isinstance(existing_task['updated_at'], str):
+                                    completed_time = datetime.fromisoformat(existing_task['updated_at'])
+                                else:
+                                    completed_time = existing_task['updated_at']
+                                
+                                time_since_completion = (datetime.now() - completed_time).total_seconds()
+                                if time_since_completion < 30:  # 30 seconds threshold
+                                    logger.info(f"Duplicate training request detected for recently completed job: {existing_id}")
+                                    logger.info(f"Completed {time_since_completion:.1f} seconds ago")
+                                    logger.info(f"Marking current job as duplicate and returning existing ID: {existing_id}")
+                                    
+                                    # Update current job to indicate it's a duplicate
+                                    await self._update_progress(training_id, 100, 'Duplicate job detected - using existing job', 
+                                                              result={'duplicate_of': existing_id, 'status': 'duplicate'})
+                                    return
+                                else:
+                                    logger.info(f"Previous job completed {time_since_completion:.1f} seconds ago, continuing with new job")
+                            except Exception as e:
+                                logger.warning(f"Error checking completion time for job {existing_id}: {e}")
+            
+            # Also check model registry for recently completed jobs with same export files
+            try:
+                models = self.model_registry.list_models()
+                for model in models:
+                    version = model['version']
+                    metadata = self.model_registry.get_model(version)
+                    if metadata and hasattr(metadata.model_info, 'export_files'):
+                        if metadata.model_info.export_files == export_files:
+                            # Check if model was created very recently (within last 30 seconds)
+                            if hasattr(metadata.model_info, 'created_at'):
+                                try:
+                                    if isinstance(metadata.model_info.created_at, str):
+                                        created_time = datetime.fromisoformat(metadata.model_info.created_at)
+                                    else:
+                                        created_time = metadata.model_info.created_at
+                                    
+                                    time_since_creation = (datetime.now() - created_time).total_seconds()
+                                    if time_since_creation < 30:  # 30 seconds threshold
+                                        logger.info(f"Duplicate training request detected for recently created model: {version}")
+                                        logger.info(f"Model created {time_since_creation:.1f} seconds ago")
+                                        # Return the training_id from the existing model
+                                        training_id_existing = getattr(metadata.model_info, 'training_id', None)
+                                        if training_id_existing:
+                                            logger.info(f"Marking current job as duplicate and returning existing ID: {training_id_existing}")
+                                            
+                                            # Update current job to indicate it's a duplicate
+                                            await self._update_progress(training_id, 100, 'Duplicate job detected - using existing job', 
+                                                                      result={'duplicate_of': training_id_existing, 'status': 'duplicate'})
+                                            return
+                                    else:
+                                        logger.info(f"Previous model created {time_since_creation:.1f} seconds ago, continuing with new job")
+                                except Exception as e:
+                                    logger.warning(f"Error checking creation time for model {version}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking model registry for duplicates: {e}")
+            
+            # Step 2: Validate export data
             await self._update_progress(training_id, 5, 'Validating export data')
             validation_results = await self.training_pipeline.validate_export_for_training(export_files[0])
             
@@ -172,7 +190,7 @@ class TrainingService:
                                           error='; '.join(validation_results['errors']))
                 return
             
-            # Step 2: Run comprehensive training pipeline with progress callback
+            # Step 3: Run comprehensive training pipeline with progress callback
             await self._update_progress(training_id, 10, 'Starting training pipeline')
             training_result = await self.training_pipeline.run_training_pipeline(
                 export_file_paths=export_files,
@@ -182,7 +200,7 @@ class TrainingService:
                 progress_callback=progress_callback
             )
             
-            # Step 3: Perform quality assessment
+            # Step 4: Perform quality assessment
             await self._update_progress(training_id, 95, 'Assessing training quality')
             quality_assessment = self.quality_assessor.assess_training_quality(
                 training_metrics=training_result.get('pipeline_metrics', {}),
@@ -193,7 +211,7 @@ class TrainingService:
             # Add quality assessment to training result
             training_result['quality_assessment'] = quality_assessment
             
-            # Step 4: Complete
+            # Step 5: Complete
             await self._update_progress(training_id, 100, 'Training completed', 
                                       result=training_result)
             
