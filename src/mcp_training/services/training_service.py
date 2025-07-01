@@ -77,6 +77,7 @@ class TrainingService:
             'export_files': export_files,
             'model_type': model_type,
             'model_name': model_name,
+            'name': model_name,  # Also store as 'name' for frontend compatibility
             'config_overrides': config_overrides
         }
         

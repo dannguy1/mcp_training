@@ -421,10 +421,14 @@ async def get_training_jobs(
             training_id = job.get('id') or job.get('training_id')
             
             # Create a job object that matches what the frontend expects
+            job_name = job.get('model_name', job.get('name', f"Training Job {training_id}"))
+            logger.info(f"Job {training_id} - model_name: {job.get('model_name')}, name: {job.get('name')}, final name: {job_name}")
+            
             job_data = {
                 'id': training_id,
                 'training_id': training_id,  # Ensure training_id is explicitly set
-                'name': job.get('model_name', job.get('name', f"Training Job {training_id}")),
+                'name': job_name,
+                'model_name': job.get('model_name'),  # Also include model_name for frontend
                 'status': job.get('status', 'unknown'),
                 'progress': job.get('progress', 0.0),
                 'step': job.get('step', job.get('current_step', '')),

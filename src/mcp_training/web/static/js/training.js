@@ -251,12 +251,15 @@ class TrainingManager {
                 bestMetric = `Acc: ${(job.evaluation_results.accuracy * 100).toFixed(1)}%`;
             }
             
+            const jobName = job.model_name || job.name || 'Unnamed Job';
+            console.log(`Job ${jobId} - model_name: ${job.model_name}, name: ${job.name}, final name: ${jobName}`);
+            
             return `
                 <tr data-job-id="${jobId}">
                     <td>${jobId}</td>
                     <td>
                         <div>
-                            <strong>${job.model_name || job.name || 'Unnamed Job'}</strong>
+                            <strong>${jobName}</strong>
                             ${job.description ? `<br><small class="text-muted">${job.description.substring(0, 50)}${job.description.length > 50 ? '...' : ''}</small>` : ''}
                         </div>
                     </td>
@@ -387,6 +390,8 @@ class TrainingManager {
             }
             
             console.log('Submitting training request:', requestData);
+            console.log('Job name from form:', jobName);
+            console.log('Model config name:', requestData.model_cfg.name);
             
             const response = await utils.apiCall('/api/training/jobs', {
                 method: 'POST',
