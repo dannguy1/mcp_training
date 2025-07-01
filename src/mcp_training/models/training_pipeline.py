@@ -19,6 +19,8 @@ from sklearn.model_selection import train_test_split
 # Import enhanced components
 from ..core.enhanced_feature_extractor import EnhancedWiFiFeatureExtractor
 from .multi_algorithm_selector import MultiAlgorithmSelector
+from .hyperparameter_optimizer import HyperparameterOptimizer, AdaptiveOptimizer
+from .quality_assessor import AdvancedQualityAssessor
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,9 @@ class TrainingPipeline:
         # Initialize enhanced components
         self.feature_extractor = EnhancedWiFiFeatureExtractor()
         self.algorithm_selector = MultiAlgorithmSelector()
+        self.hyperparameter_optimizer = HyperparameterOptimizer()
+        self.adaptive_optimizer = AdaptiveOptimizer(self.hyperparameter_optimizer)
+        self.quality_assessor = AdvancedQualityAssessor()
     
     async def validate_export_for_training(self, export_file: str) -> Dict[str, Any]:
         """Validate export file for training suitability.
@@ -578,28 +583,55 @@ class TrainingPipeline:
         return features
     
     async def _train_model(self, X: np.ndarray, model_type: str):
-        """Train the specified model type using enhanced algorithm selection."""
+        """Train the specified model type using enhanced algorithm selection and hyperparameter optimization."""
         try:
             logger.info(f"DEBUG: _train_model received X type: {type(X)}, shape: {getattr(X, 'shape', None)}, value: {X}")
             # Fallback: if X is not 2D, replace with minimal valid 2D array
             if not hasattr(X, 'ndim') or X.ndim != 2:
                 logger.warning(f"Fallback: X is not 2D, replacing with minimal valid 2D array. Original X: {X}")
                 X = np.zeros((1, 1))
+            
             # Use multi-algorithm selector to choose best algorithm
             if model_type == "auto" or model_type == "auto_select":
                 selected_algorithm, parameters = self.algorithm_selector.select_best_algorithm(X)
                 logger.info(f"Auto-selected algorithm: {selected_algorithm}")
                 logger.info(f"Selection reason: {self.algorithm_selector.selection_reason}")
-                
-                # Create model with selected algorithm
-                model = self.algorithm_selector.create_model(selected_algorithm, parameters)
                 model_type = selected_algorithm
             else:
-                # Use specified model type
-                model = self.algorithm_selector.create_model(model_type)
+                selected_algorithm = model_type
+                parameters = {}
+            
+            # Perform hyperparameter optimization
+            logger.info(f"Starting hyperparameter optimization for {selected_algorithm}")
+            try:
+                optimization_result, adaptation_result = self.adaptive_optimizer.optimize_with_adaptation(X, selected_algorithm)
+                optimized_model, _ = self.hyperparameter_optimizer.get_optimized_model(X, selected_algorithm, optimization_result)
+                
+                # Store optimization results
+                self.training_metrics['hyperparameter_optimization'] = {
+                    'optimization_result': {
+                        'best_params': optimization_result.best_params,
+                        'best_score': optimization_result.best_score,
+                        'optimization_time': optimization_result.optimization_time
+                    },
+                    'adaptation_result': adaptation_result,
+                    'analysis': self.hyperparameter_optimizer.analyze_optimization_results(optimization_result)
+                }
+                
+                model = optimized_model
+                logger.info(f"Hyperparameter optimization completed with score: {optimization_result.best_score:.4f}")
+                
+            except Exception as opt_error:
+                logger.warning(f"Hyperparameter optimization failed: {opt_error}. Using default parameters.")
+                # Fallback to default model
+                model = self.algorithm_selector.create_model(selected_algorithm, parameters)
             
             # Fit the model
             model.fit(X)
+            
+            # Perform quality assessment
+            logger.info("Starting quality assessment")
+            quality_assessment = self.quality_assessor.assess_model_quality(model, X, self.training_metrics)
             
             # Store algorithm selection info
             self.training_metrics['algorithm_selection'] = {
@@ -608,7 +640,25 @@ class TrainingPipeline:
                 'data_characteristics': getattr(self.algorithm_selector, 'data_characteristics', {})
             }
             
+            # Store quality assessment
+            self.training_metrics['quality_assessment'] = {
+                'quality_level': quality_assessment.quality_level.value,
+                'validation_status': quality_assessment.validation_status,
+                'quality_metrics': {
+                    'silhouette_score': quality_assessment.quality_metrics.silhouette_score,
+                    'calinski_harabasz_score': quality_assessment.quality_metrics.calinski_harabasz_score,
+                    'davies_bouldin_score': quality_assessment.quality_metrics.davies_bouldin_score,
+                    'score_stability': quality_assessment.quality_metrics.score_stability,
+                    'feature_utilization': quality_assessment.quality_metrics.feature_utilization,
+                    'overall_score': quality_assessment.quality_metrics.overall_score
+                },
+                'issues': quality_assessment.issues,
+                'recommendations': quality_assessment.recommendations,
+                'confidence_score': quality_assessment.confidence_score
+            }
+            
             logger.info(f"Trained {model_type} model with {X.shape[0]} samples and {X.shape[1]} features")
+            logger.info(f"Quality assessment: {quality_assessment.quality_level.value} ({quality_assessment.validation_status})")
             return model
             
         except Exception as e:
