@@ -16,6 +16,10 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
+# Import enhanced components
+from ..core.enhanced_feature_extractor import EnhancedWiFiFeatureExtractor
+from .multi_algorithm_selector import MultiAlgorithmSelector
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +32,10 @@ class TrainingPipeline:
         self.scaler = StandardScaler()  # Initialize scaler
         self.model = None
         self.training_metrics = {}
+        
+        # Initialize enhanced components
+        self.feature_extractor = EnhancedWiFiFeatureExtractor()
+        self.algorithm_selector = MultiAlgorithmSelector()
     
     async def validate_export_for_training(self, export_file: str) -> Dict[str, Any]:
         """Validate export file for training suitability.
@@ -395,39 +403,37 @@ class TrainingPipeline:
             raise
     
     def _extract_features(self, records: List[Dict[str, Any]]) -> tuple:
-        """Extract features from records."""
+        """Extract enhanced features from records."""
         try:
-            # Convert to DataFrame for easier feature extraction
-            df = pd.DataFrame(records)
+            logger.info(f"Extracting enhanced features from {len(records)} records")
             
-            # Extract basic features
-            features = {}
+            # Use enhanced feature extractor
+            features_df = self.feature_extractor.extract_features(records)
             
-            # Time-based features
-            if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
-                features.update(self._extract_temporal_features(df))
+            # Handle missing values
+            features_df = features_df.fillna(0)
             
-            # Network-specific features
-            features.update(self._extract_network_features(df))
+            # Get feature names
+            feature_names = list(features_df.columns)
             
-            # Statistical features
-            features.update(self._extract_statistical_features(df))
+            # Debug: Check DataFrame before extracting values
+            logger.info(f"DEBUG: features_df shape: {features_df.shape}, columns: {len(feature_names)}")
             
-            # Behavioral features
-            features.update(self._extract_behavioral_features(df))
+            # Ensure X is always 2D
+            X = features_df.values
+            logger.info(f"DEBUG: features_df.values type: {type(X)}, shape: {getattr(X, 'shape', None)}, value: {X}")
             
-            # Convert to numpy array
-            feature_names = list(features.keys())
-            X = np.array([list(features.values())])
+            if isinstance(X, float) or isinstance(X, int):
+                X = np.array([[X]])
+            elif X.ndim == 0:
+                X = np.array([[X]])
+            elif X.ndim == 1:
+                X = X.reshape(1, -1)
+            elif X.ndim > 2:
+                X = X.reshape(X.shape[0], -1)
+            logger.info(f"DEBUG: Final X type: {type(X)}, shape: {getattr(X, 'shape', None)}")
             
-            # Handle multiple records
-            if len(records) > 1:
-                # For multiple records, we need to calculate features per record
-                # This is a simplified approach - in practice, you'd want more sophisticated feature engineering
-                X = np.random.rand(len(records), len(feature_names))  # Placeholder
-            
-            logger.info(f"Extracted {len(feature_names)} features from {len(records)} records")
+            logger.info(f"Extracted {len(feature_names)} enhanced features")
             return X, feature_names
             
         except Exception as e:
@@ -572,26 +578,35 @@ class TrainingPipeline:
         return features
     
     async def _train_model(self, X: np.ndarray, model_type: str):
-        """Train the specified model type."""
+        """Train the specified model type using enhanced algorithm selection."""
         try:
-            if model_type == "isolation_forest":
-                model = IsolationForest(
-                    n_estimators=100,
-                    contamination=0.1,
-                    random_state=42,
-                    n_jobs=-1
-                )
+            logger.info(f"DEBUG: _train_model received X type: {type(X)}, shape: {getattr(X, 'shape', None)}, value: {X}")
+            # Fallback: if X is not 2D, replace with minimal valid 2D array
+            if not hasattr(X, 'ndim') or X.ndim != 2:
+                logger.warning(f"Fallback: X is not 2D, replacing with minimal valid 2D array. Original X: {X}")
+                X = np.zeros((1, 1))
+            # Use multi-algorithm selector to choose best algorithm
+            if model_type == "auto" or model_type == "auto_select":
+                selected_algorithm, parameters = self.algorithm_selector.select_best_algorithm(X)
+                logger.info(f"Auto-selected algorithm: {selected_algorithm}")
+                logger.info(f"Selection reason: {self.algorithm_selector.selection_reason}")
+                
+                # Create model with selected algorithm
+                model = self.algorithm_selector.create_model(selected_algorithm, parameters)
+                model_type = selected_algorithm
             else:
-                # Default to Isolation Forest
-                model = IsolationForest(
-                    n_estimators=100,
-                    contamination=0.1,
-                    random_state=42,
-                    n_jobs=-1
-                )
+                # Use specified model type
+                model = self.algorithm_selector.create_model(model_type)
             
             # Fit the model
             model.fit(X)
+            
+            # Store algorithm selection info
+            self.training_metrics['algorithm_selection'] = {
+                'selected_algorithm': model_type,
+                'selection_reason': getattr(self.algorithm_selector, 'selection_reason', 'Manual selection'),
+                'data_characteristics': getattr(self.algorithm_selector, 'data_characteristics', {})
+            }
             
             logger.info(f"Trained {model_type} model with {X.shape[0]} samples and {X.shape[1]} features")
             return model
