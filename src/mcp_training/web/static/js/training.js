@@ -17,6 +17,7 @@ class TrainingManager {
         this.currentJobId = null;
         this.updateInterval = null;
         this.lastRefreshTime = null;
+        this.showJobListErrors = true; // Flag to control error display
         this.init();
     }
     
@@ -176,7 +177,9 @@ class TrainingManager {
     async loadTrainingJobs() {
         try {
             console.log('Loading training jobs...');
-            const jobsResponse = await utils.apiCall('/api/training/jobs');
+            const jobsResponse = await utils.apiCall('/api/training/jobs', {
+                timeout: 15000 // 15 seconds timeout for loading job list
+            });
             const jobs = jobsResponse.trainings || jobsResponse;
             this.jobs = jobs;
             this.filteredJobs = [...jobs];
@@ -185,7 +188,10 @@ class TrainingManager {
             console.log(`Loaded ${jobs.length} training jobs`);
         } catch (error) {
             console.error('Failed to load training jobs:', error);
-            utils.showError('Failed to load training jobs', error);
+            // Only show error if this is not a background refresh
+            if (!error.message.includes('timeout') || this.showJobListErrors) {
+                utils.showError('Failed to load training jobs', error);
+            }
             // Set empty arrays to prevent UI issues
             this.jobs = [];
             this.filteredJobs = [];
@@ -401,8 +407,17 @@ class TrainingManager {
                 this.cleanupModalBackdrop();
             }, 100);
             
-            // Refresh the training jobs list
-            await this.loadTrainingJobs();
+            // Refresh the training jobs list in background (don't await to avoid timeout)
+            // Add small delay to ensure backend has processed the new job
+            setTimeout(() => {
+                this.showJobListErrors = false; // Suppress errors for background refresh
+                this.loadTrainingJobs().catch(error => {
+                    console.warn('Failed to refresh job list after training creation:', error);
+                    // Don't show error to user since training was successful
+                }).finally(() => {
+                    this.showJobListErrors = true; // Restore error display
+                });
+            }, 1000); // 1 second delay
             
         } catch (error) {
             console.error('Training submission error:', error);

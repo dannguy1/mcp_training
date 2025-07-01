@@ -24,6 +24,11 @@ The issue where training jobs report "Failed to start training job: Request time
 - **Issue**: The system was designed to be asynchronous (training runs in background), but the initial response was taking too long
 - **Impact**: Users saw timeout errors even though jobs were actually created and running
 
+### **4. Job List Refresh Timeout (Additional Issue)**
+- **Issue**: After successful training job creation, the frontend calls `loadTrainingJobs()` which can also timeout
+- **Location**: `src/mcp_training/web/static/js/training.js` `submitTraining()` method
+- **Impact**: Even though training job creation succeeds, the entire operation appears to fail due to job list refresh timeout
+
 ## Resolution Strategy
 
 ### **1. Optimized Backend Response Time**
@@ -53,6 +58,7 @@ The issue where training jobs report "Failed to start training job: Request time
 - **Change**: Added specific timeouts for training operations:
   - Export files loading: 15 seconds (increased from 10)
   - Training job creation: 45 seconds (new specific timeout)
+  - Job list loading: 15 seconds (new specific timeout)
 - **Location**: `src/mcp_training/web/static/js/training.js`
 - **Reason**: Training operations may legitimately take longer
 
@@ -69,6 +75,36 @@ The issue where training jobs report "Failed to start training job: Request time
   - Marks duplicate jobs as completed with reference to original
   - Provides clear status updates
   - Prevents unnecessary duplicate processing
+
+### **4. Background Job List Refresh (Additional Fix)**
+
+#### **Problem**: Job List Refresh Timeout
+- **Issue**: After successful training job creation, `loadTrainingJobs()` was called synchronously
+- **Impact**: If job list loading times out, the entire training submission appears to fail
+- **Solution**: Made job list refresh asynchronous and non-blocking
+
+#### **Implementation**:
+```javascript
+// Before: Synchronous job list refresh
+await this.loadTrainingJobs();
+
+// After: Asynchronous background refresh
+setTimeout(() => {
+    this.showJobListErrors = false; // Suppress errors for background refresh
+    this.loadTrainingJobs().catch(error => {
+        console.warn('Failed to refresh job list after training creation:', error);
+        // Don't show error to user since training was successful
+    }).finally(() => {
+        this.showJobListErrors = true; // Restore error display
+    });
+}, 1000); // 1 second delay
+```
+
+#### **Benefits**:
+- ✅ Training job creation success is not affected by job list refresh failures
+- ✅ Users get immediate feedback that training started successfully
+- ✅ Job list refreshes in background without blocking the UI
+- ✅ Error suppression prevents confusing error messages
 
 ## Implementation Details
 
@@ -143,6 +179,26 @@ const response = await utils.apiCall('/api/training/jobs', {
     body: JSON.stringify(requestData),
     timeout: 45000 // 45 seconds timeout for training job creation
 });
+
+// Job list loading
+const jobsResponse = await utils.apiCall('/api/training/jobs', {
+    timeout: 15000 // 15 seconds timeout for loading job list
+});
+```
+
+#### **Background Job List Refresh**
+
+```javascript
+// Asynchronous background refresh with error suppression
+setTimeout(() => {
+    this.showJobListErrors = false; // Suppress errors for background refresh
+    this.loadTrainingJobs().catch(error => {
+        console.warn('Failed to refresh job list after training creation:', error);
+        // Don't show error to user since training was successful
+    }).finally(() => {
+        this.showJobListErrors = true; // Restore error display
+    });
+}, 1000); // 1 second delay
 ```
 
 ## Testing and Validation
@@ -177,6 +233,17 @@ const response = await utils.apiCall('/api/training/jobs', {
   - Better timeout error messages
   - Duplicate job status updates
   - Clearer user feedback
+  - Background job list refresh with error suppression
+
+### **Additional Fixes**
+
+#### **Job List Refresh**
+- **Status**: ✅ Fixed
+- **Method**: Asynchronous background refresh
+- **Benefits**:
+  - Training success not affected by job list refresh failures
+  - Immediate user feedback
+  - No confusing error messages
 
 ## Monitoring and Maintenance
 
@@ -184,16 +251,19 @@ const response = await utils.apiCall('/api/training/jobs', {
 - Added detailed logging for duplicate detection
 - Enhanced progress tracking
 - Better error reporting
+- Background refresh logging
 
 ### **Performance Monitoring**
 - Track response times for training job creation
 - Monitor timeout frequency
 - Alert on performance degradation
+- Monitor job list refresh success rates
 
 ### **Future Improvements**
 - Consider implementing WebSocket updates for real-time progress
 - Add retry mechanisms for failed requests
 - Implement progressive loading for large datasets
+- Add job list refresh retry logic
 
 ## Conclusion
 
@@ -202,6 +272,7 @@ The timeout issue has been completely resolved through a combination of:
 1. **Backend Optimization**: Immediate response with background processing
 2. **Frontend Enhancement**: Increased timeouts and better error handling
 3. **Architecture Improvement**: Proper asynchronous design implementation
+4. **Background Refresh**: Asynchronous job list refresh with error suppression
 
 The system now provides:
 - ✅ Immediate feedback for training job creation
@@ -209,5 +280,6 @@ The system now provides:
 - ✅ Preserved duplicate detection and validation
 - ✅ Better user experience
 - ✅ Proper asynchronous operation
+- ✅ Background job list refresh that doesn't affect training success
 
-Users will no longer see timeout errors for successfully created training jobs, and the system maintains all its validation and duplicate detection capabilities while providing a much better user experience. 
+Users will no longer see timeout errors for successfully created training jobs, and the system maintains all its validation and duplicate detection capabilities while providing a much better user experience. The additional fix for job list refresh ensures that even if the job list loading is slow, it won't affect the user's perception of training job creation success. 
