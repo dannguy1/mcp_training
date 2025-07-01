@@ -50,6 +50,16 @@ class TrainingStatus(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     result: Optional[Dict[str, Any]] = Field(None, description="Training results")
+    # Additional fields for job information
+    id: Optional[str] = Field(None, description="Job ID")
+    name: Optional[str] = Field(None, description="Job name")
+    model_name: Optional[str] = Field(None, description="Model name")
+    export_file: Optional[str] = Field(None, description="Export file path")
+    export_files: Optional[List[str]] = Field(None, description="Export files list")
+    model_type: Optional[str] = Field(None, description="Model type")
+    description: Optional[str] = Field(None, description="Job description")
+    evaluation_results: Optional[Dict[str, Any]] = Field(None, description="Evaluation results")
+    comprehensive_stats: Optional[Dict[str, Any]] = Field(None, description="Comprehensive statistics")
 
 
 class TrainingList(BaseModel):
@@ -431,7 +441,7 @@ async def get_training_jobs(
                 'model_name': job.get('model_name'),  # Also include model_name for frontend
                 'status': job.get('status', 'unknown'),
                 'progress': job.get('progress', 0.0),
-                'step': job.get('step', job.get('current_step', '')),
+                'current_step': job.get('step', job.get('current_step', '')),
                 'message': job.get('error', '') or job.get('step', '') or job.get('message', ''),
                 'created_at': job.get('start_time', job.get('created_at', datetime.now())),
                 'updated_at': job.get('updated_at', job.get('start_time', datetime.now())),
@@ -444,22 +454,8 @@ async def get_training_jobs(
                 'comprehensive_stats': job.get('comprehensive_stats')
             }
             
-            training_status = TrainingStatus(
-                training_id=job_data['training_id'],
-                status=job_data['status'],
-                progress=job_data['progress'],
-                current_step=job_data['step'],
-                message=job_data['message'],
-                created_at=job_data['created_at'],
-                updated_at=job_data['updated_at'],
-                result=job_data['result']
-            )
-            
-            # Add the original properties to the TrainingStatus object
-            training_status_dict = training_status.dict()
-            training_status_dict.update(job_data)
-            
-            training_list.append(training_status_dict)
+            training_status = TrainingStatus(**job_data)
+            training_list.append(training_status)
         
         return TrainingList(
             trainings=training_list,
