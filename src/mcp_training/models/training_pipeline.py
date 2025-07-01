@@ -638,6 +638,7 @@ class TrainingPipeline:
             training_info = TrainingInfo(
                 training_samples=len(features_data),
                 feature_names=list(evaluation_results.get('feature_importance', {}).keys()),
+                feature_count=len(evaluation_results.get('feature_importance', {})),
                 training_duration=0.0,  # Will be set by training service
                 export_files_size=Path(export_file).stat().st_size,
                 model_parameters=self._get_model_parameters(model),

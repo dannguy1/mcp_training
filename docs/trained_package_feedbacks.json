@@ -1,0 +1,82 @@
+{
+  "report_generated_at": "2025-07-01T00:38:45.376Z",
+  "model_version": "",
+  "executive_summary": {
+    "package_name": "WiFiAgent",
+    "package_version": "20250630_144101",
+    "algorithm": "IsolationForest",
+    "framework": "scikit-learn",
+    "validation_status": "FAILED",
+    "overall_score": 0,
+    "score_label": "Poor",
+    "critical_issues": 0,
+    "warnings": 0,
+    "recommendations": 0
+  },
+  "validation_summary": {
+    "is_valid": false,
+    "overall_score": 0,
+    "score_label": "Poor",
+    "error_count": 0,
+    "warning_count": 0,
+    "recommendation_count": 0
+  },
+  "quality_metrics": {
+    "f1_score": 0,
+    "roc_auc": 0,
+    "precision": 0,
+    "recall": 0,
+    "accuracy": 0
+  },
+  "issues": [
+    {
+      "severity": "error",
+      "description": "F1 score below acceptable threshold (0.5)"
+    },
+    {
+      "severity": "error",
+      "description": "ROC AUC below acceptable threshold (0.6)"
+    },
+    {
+      "severity": "warning",
+      "description": "Low precision may result in many false positives"
+    },
+    {
+      "severity": "warning",
+      "description": "Low recall may miss many anomalies"
+    },
+    {
+      "severity": "warning",
+      "description": "Low accuracy may indicate poor model performance"
+    },
+    {
+      "severity": "warning",
+      "description": "Model description not provided"
+    },
+    {
+      "severity": "warning",
+      "description": "Number of training samples not specified"
+    },
+    {
+      "severity": "warning",
+      "description": "Missing evaluation metrics: f1_score, precision, recall, roc_auc"
+    },
+    {
+      "severity": "warning",
+      "description": "No file hashes found in deployment manifest"
+    },
+    {
+      "severity": "warning",
+      "description": "No dependencies listed in deployment manifest"
+    }
+  ],
+  "errors": [],
+  "warnings": [],
+  "recommendations": [],
+  "next_steps": [
+    "Address validation errors before deployment",
+    "Consider retraining the model",
+    "Review and fix configuration issues",
+    "Validate against a larger test dataset"
+  ]
+}

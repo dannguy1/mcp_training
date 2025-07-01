@@ -28,6 +28,7 @@ class TrainingInfo(BaseModel):
     
     training_samples: int = Field(..., description="Number of training samples")
     feature_names: List[str] = Field(default_factory=list, description="Feature names")
+    feature_count: Optional[int] = Field(None, description="Number of features")
     export_files_size: Optional[int] = Field(None, description="Total export files size")
     training_duration: Optional[float] = Field(None, description="Training duration in seconds")
     model_parameters: Dict[str, Any] = Field(default_factory=dict, description="Model parameters")
@@ -91,6 +92,7 @@ class ModelMetadata(BaseModel):
             training_info=TrainingInfo(
                 training_samples=training_samples,
                 feature_names=feature_names,
+                feature_count=len(feature_names),
                 model_parameters=model_parameters or {}
             ),
             evaluation_info=EvaluationInfo()
