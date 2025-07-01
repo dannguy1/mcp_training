@@ -1,10 +1,12 @@
 """
-Model evaluation for MCP Training Service.
+Enhanced Model evaluation for MCP Training Service.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 import logging
 from datetime import datetime
 
@@ -12,14 +14,24 @@ logger = logging.getLogger(__name__)
 
 
 class ModelEvaluator:
-    """Evaluator for unsupervised anomaly detection models."""
+    """Enhanced evaluator for unsupervised anomaly detection models."""
     
     def __init__(self, config=None):
         """Initialize model evaluator."""
         self.config = config
+        self.quality_thresholds = {
+            'min_silhouette_score': 0.2,
+            'min_score_stability': 0.6,
+            'min_feature_utilization': 0.3,
+            'max_score_skewness': 2.0,
+            'min_score_diversity': 0.1,
+            'max_anomaly_ratio': 0.3,
+            'min_samples': 100,
+            'min_features': 5
+        }
     
     def evaluate_model(self, model, X: np.ndarray, feature_names: List[str] = None, X_original: np.ndarray = None) -> Dict[str, Any]:
-        """Evaluate an unsupervised anomaly detection model.
+        """Evaluate an unsupervised anomaly detection model with enhanced metrics.
         
         Args:
             model: Trained model (e.g., IsolationForest)
@@ -28,68 +40,85 @@ class ModelEvaluator:
             X_original: Original (unscaled) feature matrix for additional metrics
             
         Returns:
-            Dictionary containing evaluation results
+            Dictionary containing comprehensive evaluation results
         """
         try:
-            logger.info(f"Starting model evaluation with {X.shape[0]} samples and {X.shape[1]} features")
+            logger.info(f"Starting enhanced model evaluation with {X.shape[0]} samples and {X.shape[1]} features")
+            
+            # Validate input data
+            if X.shape[0] < self.quality_thresholds['min_samples']:
+                logger.warning(f"Low sample count: {X.shape[0]} < {self.quality_thresholds['min_samples']}")
+            
+            if X.shape[1] < self.quality_thresholds['min_features']:
+                logger.warning(f"Low feature count: {X.shape[1]} < {self.quality_thresholds['min_features']}")
             
             # Get anomaly scores
             scores = model.score_samples(X)
             logger.info(f"Calculated anomaly scores with range [{np.min(scores):.4f}, {np.max(scores):.4f}]")
             
-            # Calculate basic metrics
-            basic_metrics = self._calculate_basic_metrics(scores)
-            logger.info(f"Calculated basic metrics: {len(basic_metrics)} metrics")
+            # Calculate enhanced basic metrics
+            basic_metrics = self._calculate_enhanced_basic_metrics(scores, X)
+            logger.info(f"Calculated enhanced basic metrics: {len(basic_metrics)} metrics")
+            
+            # Calculate unsupervised clustering metrics
+            clustering_metrics = self._calculate_clustering_metrics(X, scores)
+            logger.info(f"Calculated clustering metrics: {len(clustering_metrics)} metrics")
             
             # Calculate traditional ML metrics if original features available
             if X_original is not None:
-                traditional_metrics = self._calculate_traditional_metrics(model, X, X_original, scores)
+                traditional_metrics = self._calculate_enhanced_traditional_metrics(model, X, X_original, scores)
                 basic_metrics.update(traditional_metrics)
-                logger.info(f"Calculated traditional metrics: {len(traditional_metrics)} metrics")
+                logger.info(f"Calculated enhanced traditional metrics: {len(traditional_metrics)} metrics")
             
-            # Calculate score distribution
-            score_distribution = self._calculate_score_distribution(scores)
-            logger.info("Calculated score distribution")
+            # Calculate enhanced score distribution
+            score_distribution = self._calculate_enhanced_score_distribution(scores)
+            logger.info("Calculated enhanced score distribution")
             
             # Calculate feature importance (if available)
             try:
-                feature_importance = self._calculate_feature_importance(model, X, feature_names)
-                logger.info(f"Calculated feature importance for {len(feature_importance)} features")
+                feature_importance = self._calculate_enhanced_feature_importance(model, X, feature_names)
+                logger.info(f"Calculated enhanced feature importance for {len(feature_importance)} features")
             except Exception as e:
                 logger.warning(f"Feature importance calculation failed: {e}")
                 feature_importance = {}
             
             # Calculate cross-validation score
             try:
-                cross_validation_score = self._calculate_cross_validation_score(model, X)
+                cross_validation_score = self._calculate_enhanced_cross_validation_score(model, X)
                 if cross_validation_score is not None:
-                    logger.info(f"Cross-validation score: {cross_validation_score:.4f}")
+                    logger.info(f"Enhanced cross-validation score: {cross_validation_score:.4f}")
                 else:
-                    logger.warning("Cross-validation score calculation returned None")
+                    logger.warning("Enhanced cross-validation score calculation returned None")
             except Exception as e:
-                logger.warning(f"Cross-validation score calculation failed: {e}")
+                logger.warning(f"Enhanced cross-validation score calculation failed: {e}")
                 cross_validation_score = None
             
-            # Calculate thresholds and recommendations
-            thresholds = self._calculate_thresholds(scores)
-            logger.info(f"Calculated {len(thresholds)} threshold values")
+            # Calculate enhanced thresholds and recommendations
+            thresholds = self._calculate_enhanced_thresholds(scores)
+            logger.info(f"Calculated {len(thresholds)} enhanced threshold values")
             
-            # Generate recommendations
-            recommendations = self._generate_recommendations(basic_metrics, thresholds)
-            logger.info(f"Generated {len(recommendations)} recommendations")
+            # Generate enhanced recommendations
+            recommendations = self._generate_enhanced_recommendations(basic_metrics, clustering_metrics, thresholds, X.shape)
+            logger.info(f"Generated {len(recommendations)} enhanced recommendations")
             
-            # Calculate model quality metrics
-            quality_metrics = self._calculate_quality_metrics(model, X, scores)
-            logger.info(f"Calculated quality metrics: {len(quality_metrics)} metrics")
+            # Calculate enhanced model quality metrics
+            quality_metrics = self._calculate_enhanced_quality_metrics(model, X, scores, clustering_metrics)
+            logger.info(f"Calculated enhanced quality metrics: {len(quality_metrics)} metrics")
+            
+            # Calculate overall quality assessment
+            quality_assessment = self._calculate_quality_assessment(basic_metrics, clustering_metrics, quality_metrics, X.shape)
+            logger.info("Calculated comprehensive quality assessment")
             
             evaluation_results = {
                 'basic_metrics': basic_metrics,
+                'clustering_metrics': clustering_metrics,
                 'score_distribution': score_distribution,
                 'feature_importance': feature_importance,
                 'cross_validation_score': cross_validation_score,
                 'thresholds': thresholds,
                 'recommendations': recommendations,
                 'quality_metrics': quality_metrics,
+                'quality_assessment': quality_assessment,
                 'evaluation_summary': {
                     'total_samples': X.shape[0],
                     'total_features': X.shape[1],
@@ -97,38 +126,50 @@ class ModelEvaluator:
                     'score_mean': float(np.mean(scores)),
                     'score_std': float(np.std(scores)),
                     'evaluation_timestamp': datetime.now().isoformat(),
-                    'model_quality_score': self._calculate_overall_quality_score(quality_metrics, basic_metrics)
+                    'model_quality_score': quality_assessment['overall_score'],
+                    'quality_level': quality_assessment['quality_level'],
+                    'validation_status': quality_assessment['validation_status']
                 }
             }
             
-            logger.info("Model evaluation completed successfully")
+            logger.info("Enhanced model evaluation completed successfully")
             return evaluation_results
             
         except Exception as e:
-            logger.error(f"Error evaluating model: {e}")
+            logger.error(f"Error in enhanced model evaluation: {e}")
             logger.error(f"Error details: {type(e).__name__}: {str(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             
             return {
                 'basic_metrics': {},
+                'clustering_metrics': {},
                 'score_distribution': {},
                 'feature_importance': {},
                 'cross_validation_score': None,
                 'thresholds': {},
-                'recommendations': [],
+                'recommendations': ['Evaluation failed due to system error'],
                 'quality_metrics': {},
+                'quality_assessment': {
+                    'overall_score': 0.0,
+                    'quality_level': 'Poor',
+                    'validation_status': 'FAILED',
+                    'issues': [f'Evaluation error: {str(e)}']
+                },
                 'error': str(e),
                 'error_type': type(e).__name__,
                 'evaluation_summary': {
                     'error_occurred': True,
                     'error_message': str(e),
-                    'evaluation_timestamp': datetime.now().isoformat()
+                    'evaluation_timestamp': datetime.now().isoformat(),
+                    'model_quality_score': 0.0,
+                    'quality_level': 'Poor',
+                    'validation_status': 'FAILED'
                 }
             }
     
-    def _calculate_basic_metrics(self, scores: np.ndarray) -> Dict[str, float]:
-        """Calculate basic metrics for anomaly scores."""
+    def _calculate_enhanced_basic_metrics(self, scores: np.ndarray, X: np.ndarray) -> Dict[str, float]:
+        """Calculate enhanced basic metrics for anomaly scores."""
         try:
             return {
                 'score_mean': float(np.mean(scores)),
@@ -143,10 +184,14 @@ class ModelEvaluator:
                 'total_samples': float(len(scores)),
                 'score_variance': float(np.var(scores)),
                 'score_skewness': float(self._calculate_skewness(scores)),
-                'score_kurtosis': float(self._calculate_kurtosis(scores))
+                'score_kurtosis': float(self._calculate_kurtosis(scores)),
+                'score_stability': 1.0 - (np.std(scores) / (np.max(scores) - np.min(scores) + 1e-8)),
+                'feature_utilization': np.sum(np.var(X, axis=0) > 0.01) / len(np.var(X, axis=0)),
+                'score_diversity': float(np.std(scores)),
+                'model_complexity': float(X.shape[1])  # Number of features
             }
         except Exception as e:
-            logger.error(f"Error calculating basic metrics: {e}")
+            logger.error(f"Error calculating enhanced basic metrics: {e}")
             return {}
     
     def _calculate_skewness(self, scores: np.ndarray) -> float:
@@ -171,8 +216,8 @@ class ModelEvaluator:
         except:
             return 0.0
     
-    def _calculate_score_distribution(self, scores: np.ndarray) -> Dict[str, Any]:
-        """Calculate score distribution statistics."""
+    def _calculate_enhanced_score_distribution(self, scores: np.ndarray) -> Dict[str, Any]:
+        """Calculate enhanced score distribution statistics."""
         try:
             percentiles = [1, 5, 10, 25, 50, 75, 90, 95, 99]
             distribution = {
@@ -187,7 +232,7 @@ class ModelEvaluator:
             }
             return distribution
         except Exception as e:
-            logger.error(f"Error calculating score distribution: {e}")
+            logger.error(f"Error calculating enhanced score distribution: {e}")
             return {}
     
     def _detect_outliers(self, scores: np.ndarray) -> Dict[str, Any]:
@@ -211,15 +256,15 @@ class ModelEvaluator:
             logger.error(f"Error detecting outliers: {e}")
             return {}
     
-    def _calculate_feature_importance(self, model, X: np.ndarray, feature_names: List[str] = None) -> Dict[str, float]:
-        """Calculate feature importance for unsupervised models."""
+    def _calculate_enhanced_feature_importance(self, model, X: np.ndarray, feature_names: List[str] = None) -> Dict[str, float]:
+        """Calculate enhanced feature importance for unsupervised models."""
         try:
             if hasattr(model, 'feature_importances_'):
                 # For models with built-in feature importance
                 importances = model.feature_importances_
             elif hasattr(model, 'estimators_') and len(model.estimators_) > 0:
                 # For ensemble models, calculate permutation importance
-                importances = self._calculate_permutation_importance(model, X)
+                importances = self._calculate_enhanced_permutation_importance(model, X)
             else:
                 # Fallback: use variance-based importance
                 importances = np.var(X, axis=0)
@@ -230,11 +275,11 @@ class ModelEvaluator:
                 return {f'feature_{i}': float(imp) for i, imp in enumerate(importances)}
                 
         except Exception as e:
-            logger.error(f"Error calculating feature importance: {e}")
+            logger.error(f"Error calculating enhanced feature importance: {e}")
             return {}
     
-    def _calculate_permutation_importance(self, model, X: np.ndarray) -> np.ndarray:
-        """Calculate permutation importance for unsupervised models."""
+    def _calculate_enhanced_permutation_importance(self, model, X: np.ndarray) -> np.ndarray:
+        """Calculate enhanced permutation importance for unsupervised models."""
         try:
             # Use a small sample for efficiency
             sample_size = min(1000, X.shape[0])
@@ -268,12 +313,12 @@ class ModelEvaluator:
             return feature_importance
             
         except Exception as e:
-            logger.error(f"Error calculating permutation importance: {e}")
+            logger.error(f"Error calculating enhanced permutation importance: {e}")
             # Fallback to variance-based importance
             return np.var(X, axis=0)
     
-    def _calculate_cross_validation_score(self, model, X: np.ndarray) -> Optional[float]:
-        """Calculate cross-validation score for unsupervised models."""
+    def _calculate_enhanced_cross_validation_score(self, model, X: np.ndarray) -> Optional[float]:
+        """Calculate enhanced cross-validation score for unsupervised models."""
         try:
             from sklearn.model_selection import cross_val_score
             
@@ -295,11 +340,11 @@ class ModelEvaluator:
                 return None
                 
         except Exception as e:
-            logger.error(f"Error calculating cross-validation score: {e}")
+            logger.error(f"Error calculating enhanced cross-validation score: {e}")
             return None
     
-    def _calculate_thresholds(self, scores: np.ndarray) -> Dict[str, float]:
-        """Calculate various threshold values for anomaly detection."""
+    def _calculate_enhanced_thresholds(self, scores: np.ndarray) -> Dict[str, float]:
+        """Calculate various enhanced threshold values for anomaly detection."""
         try:
             return {
                 'p90_threshold': float(np.percentile(scores, 90)),
@@ -310,11 +355,11 @@ class ModelEvaluator:
                 'iqr_upper': float(np.percentile(scores, 75) + 1.5 * (np.percentile(scores, 75) - np.percentile(scores, 25)))
             }
         except Exception as e:
-            logger.error(f"Error calculating thresholds: {e}")
+            logger.error(f"Error calculating enhanced thresholds: {e}")
             return {}
     
-    def _calculate_quality_metrics(self, model, X: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
-        """Calculate model quality metrics."""
+    def _calculate_enhanced_quality_metrics(self, model, X: np.ndarray, scores: np.ndarray, clustering_metrics: Dict[str, float]) -> Dict[str, float]:
+        """Calculate enhanced model quality metrics."""
         try:
             # Calculate silhouette score if possible
             try:
@@ -331,88 +376,156 @@ class ModelEvaluator:
             
             # Calculate feature utilization
             if hasattr(model, 'feature_importances_'):
-                feature_utilization = np.sum(model.feature_importances_ > 0.01) / len(model.feature_importances_)
+                feature_utilization = np.sum(model.feature_importances_ > 0.0) / len(model.feature_importances_)
             else:
                 feature_utilization = 1.0
+            
+            # Get clustering metrics
+            calinski_harabasz = clustering_metrics.get('calinski_harabasz_score', 0.0)
+            davies_bouldin = clustering_metrics.get('davies_bouldin_score', 1.0)
             
             return {
                 'silhouette_score': float(silhouette),
                 'score_stability': float(score_stability),
                 'feature_utilization': float(feature_utilization),
                 'score_diversity': float(np.std(scores)),
-                'model_complexity': float(X.shape[1])  # Number of features
+                'model_complexity': float(X.shape[1]),  # Number of features
+                'calinski_harabasz_score': float(calinski_harabasz),
+                'davies_bouldin_score': float(davies_bouldin),
+                'clustering_quality': float(1.0 / (1.0 + davies_bouldin))  # Normalize Davies-Bouldin
             }
         except Exception as e:
-            logger.error(f"Error calculating quality metrics: {e}")
+            logger.error(f"Error calculating enhanced quality metrics: {e}")
             return {}
     
-    def _calculate_overall_quality_score(self, quality_metrics: Dict[str, float], basic_metrics: Dict[str, float]) -> float:
-        """Calculate overall model quality score."""
+    def _calculate_quality_assessment(self, basic_metrics: Dict[str, float], clustering_metrics: Dict[str, float], quality_metrics: Dict[str, float], X_shape: Tuple[int, int]) -> Dict[str, Any]:
+        """Calculate overall quality assessment."""
         try:
-            scores = []
+            # Check quality thresholds
+            quality_level = 'Good'
+            validation_status = 'VALID'
+            issues = []
             
-            # Silhouette score (0-1, higher is better)
+            # Check silhouette score
+            silhouette_score = quality_metrics.get('silhouette_score', 0.0)
+            if silhouette_score < self.quality_thresholds['min_silhouette_score']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("Low silhouette score detected. Model may not be effective for clustering.")
+            
+            # Check score stability
+            score_stability = quality_metrics.get('score_stability', 0.0)
+            if score_stability < self.quality_thresholds['min_score_stability']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("Low score stability detected. Model may be sensitive to data variations.")
+            
+            # Check feature utilization
+            feature_utilization = quality_metrics.get('feature_utilization', 0.0)
+            if feature_utilization < self.quality_thresholds['min_feature_utilization']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("Low feature utilization detected. Consider feature selection or engineering additional features.")
+            
+            # Check score skewness
+            score_skewness = basic_metrics.get('score_skewness', 0.0)
+            if abs(score_skewness) > self.quality_thresholds['max_score_skewness']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("High score skewness detected. Model may not be effective for anomaly detection.")
+            
+            # Check score diversity
+            score_diversity = quality_metrics.get('score_diversity', 0.0)
+            if score_diversity < self.quality_thresholds['min_score_diversity']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("Low score diversity detected. Model may not be effective for anomaly detection.")
+            
+            # Check anomaly ratio
+            anomaly_ratio = basic_metrics.get('anomaly_ratio', 0.1)
+            if anomaly_ratio > self.quality_thresholds['max_anomaly_ratio']:
+                quality_level = 'Poor'
+                validation_status = 'FAILED'
+                issues.append("High anomaly ratio detected. Consider adjusting contamination parameter or reviewing data quality.")
+            
+            # Calculate overall score
+            overall_score = 0.0
+            score_components = 0
+            
             if 'silhouette_score' in quality_metrics:
-                scores.append(quality_metrics['silhouette_score'])
-            
-            # Score stability (0-1, higher is better)
+                overall_score += quality_metrics['silhouette_score']
+                score_components += 1
             if 'score_stability' in quality_metrics:
-                scores.append(quality_metrics['score_stability'])
-            
-            # Feature utilization (0-1, higher is better)
+                overall_score += quality_metrics['score_stability']
+                score_components += 1
             if 'feature_utilization' in quality_metrics:
-                scores.append(quality_metrics['feature_utilization'])
+                overall_score += quality_metrics['feature_utilization']
+                score_components += 1
+            if 'clustering_quality' in quality_metrics:
+                overall_score += quality_metrics['clustering_quality']
+                score_components += 1
             
-            # Score diversity (normalized, moderate is better)
-            if 'score_diversity' in quality_metrics and 'score_range' in basic_metrics:
-                diversity_ratio = quality_metrics['score_diversity'] / (basic_metrics['score_range'] + 1e-8)
-                # Penalize very low or very high diversity
-                if diversity_ratio < 0.1 or diversity_ratio > 0.9:
-                    scores.append(0.5)
-                else:
-                    scores.append(1.0)
-            
-            if scores:
-                return float(np.mean(scores))
+            # Normalize overall score
+            if score_components > 0:
+                overall_score = overall_score / score_components
             else:
-                return 0.5  # Default neutral score
-                
+                overall_score = 0.5  # Default neutral score
+            
+            # Adjust score based on validation status
+            if validation_status == 'FAILED':
+                overall_score = max(0.0, overall_score * 0.5)  # Penalize but don't zero out
+            
+            return {
+                'overall_score': float(overall_score),
+                'quality_level': quality_level,
+                'validation_status': validation_status,
+                'issues': issues
+            }
         except Exception as e:
-            logger.error(f"Error calculating overall quality score: {e}")
-            return 0.5
+            logger.error(f"Error calculating quality assessment: {e}")
+            return {
+                'overall_score': 0.0,
+                'quality_level': 'Poor',
+                'validation_status': 'FAILED',
+                'issues': [f'Assessment error: {str(e)}']
+            }
     
-    def _generate_recommendations(self, metrics: Dict[str, float], thresholds: Dict[str, float]) -> List[str]:
-        """Generate recommendations based on evaluation results."""
+    def _generate_enhanced_recommendations(self, basic_metrics: Dict[str, float], clustering_metrics: Dict[str, float], thresholds: Dict[str, float], X_shape: Tuple[int, int]) -> List[str]:
+        """Generate enhanced recommendations based on evaluation results."""
         recommendations = []
         
         try:
             # Check score distribution
-            if 'score_std' in metrics and metrics['score_std'] < 0.01:
+            if 'score_std' in basic_metrics and basic_metrics['score_std'] < 0.01:
                 recommendations.append("Low score variance detected. Consider using more diverse features or adjusting model parameters.")
             
             # Check anomaly ratio
-            if 'anomaly_ratio' in metrics and metrics['anomaly_ratio'] > 0.2:
+            if 'anomaly_ratio' in basic_metrics and basic_metrics['anomaly_ratio'] > 0.2:
                 recommendations.append("High anomaly ratio detected. Consider adjusting contamination parameter or reviewing data quality.")
             
             # Check feature utilization
-            if 'feature_utilization' in metrics and metrics['feature_utilization'] < 0.5:
+            if 'feature_utilization' in basic_metrics and basic_metrics['feature_utilization'] < 0.5:
                 recommendations.append("Low feature utilization detected. Consider feature selection or engineering additional features.")
             
             # Check score stability
-            if 'score_stability' in metrics and metrics['score_stability'] < 0.7:
+            if 'score_stability' in basic_metrics and basic_metrics['score_stability'] < 0.7:
                 recommendations.append("Low score stability detected. Model may be sensitive to data variations.")
+            
+            # Check clustering quality
+            if clustering_metrics['davies_bouldin_score'] > 1.0:
+                recommendations.append("High Davies-Bouldin Index detected. Consider adjusting clustering parameters or reviewing data quality.")
             
             # Add general recommendations
             if len(recommendations) == 0:
                 recommendations.append("Model evaluation completed successfully. Consider monitoring performance on new data.")
             
         except Exception as e:
-            logger.error(f"Error generating recommendations: {e}")
+            logger.error(f"Error generating enhanced recommendations: {e}")
             recommendations.append("Unable to generate specific recommendations due to evaluation errors.")
         
         return recommendations
     
-    def _calculate_traditional_metrics(self, model, X_scaled: np.ndarray, X_original: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
+    def _calculate_enhanced_traditional_metrics(self, model, X_scaled: np.ndarray, X_original: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
         """Calculate traditional ML metrics for unsupervised anomaly detection.
         
         Args:
@@ -503,4 +616,26 @@ class ModelEvaluator:
             
         except Exception as e:
             logger.error(f"Error calculating traditional metrics: {e}")
+            return {}
+    
+    def _calculate_clustering_metrics(self, X: np.ndarray, scores: np.ndarray) -> Dict[str, float]:
+        """Calculate clustering metrics."""
+        try:
+            # Use KMeans for clustering
+            kmeans = KMeans(n_clusters=2, random_state=42)
+            kmeans.fit(X)
+            labels = kmeans.labels_
+            
+            # Calculate Calinski-Harabasz score
+            calinski_harabasz = calinski_harabasz_score(X, labels)
+            
+            # Calculate Davies-Bouldin score
+            davies_bouldin = davies_bouldin_score(X, labels)
+            
+            return {
+                'calinski_harabasz_score': float(calinski_harabasz),
+                'davies_bouldin_score': float(davies_bouldin)
+            }
+        except Exception as e:
+            logger.error(f"Error calculating clustering metrics: {e}")
             return {} 
