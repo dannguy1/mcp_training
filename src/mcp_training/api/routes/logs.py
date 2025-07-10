@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from ...utils.logger import get_logger
 from ...services.deps import get_storage_service
 
@@ -19,6 +19,13 @@ router = APIRouter()
 
 class TrainingLogEntry(BaseModel):
     """Training log entry model."""
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        json_encoders={
+            datetime: lambda v: v.isoformat()
+        }
+    )
+    
     timestamp: datetime = Field(..., description="Log timestamp")
     level: str = Field(..., description="Log level")
     message: str = Field(..., description="Log message")
@@ -27,15 +34,12 @@ class TrainingLogEntry(BaseModel):
     progress: Optional[float] = Field(None, description="Training progress percentage")
     module: Optional[str] = Field(None, description="Module name")
     extra: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional log data")
-    
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
 
 
 class TrainingLogList(BaseModel):
     """Training log list response model."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     logs: List[TrainingLogEntry] = Field(..., description="List of training log entries")
     total: int = Field(..., description="Total number of logs")
     page: int = Field(..., description="Current page")

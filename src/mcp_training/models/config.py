@@ -3,13 +3,15 @@ Model configuration for MCP Training Service.
 """
 
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pathlib import Path
 import yaml
 
 
 class ModelParameters(BaseModel):
     """Model parameters configuration."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     type: str = Field(default="isolation_forest")
     n_estimators: int = Field(default=100)
     max_samples: str = Field(default="auto")
@@ -21,6 +23,8 @@ class ModelParameters(BaseModel):
 
 class FeatureConfig(BaseModel):
     """Feature configuration."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     numeric: List[str] = Field(default_factory=list)
     categorical: List[str] = Field(default_factory=list)
     temporal: List[str] = Field(default_factory=list)
@@ -29,6 +33,8 @@ class FeatureConfig(BaseModel):
 
 class StorageConfig(BaseModel):
     """Storage configuration."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     directory: str = Field(default="models")
     version_format: str = Field(default="%Y%m%d_%H%M%S")
     keep_last_n_versions: int = Field(default=5)
@@ -38,6 +44,8 @@ class StorageConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     """Complete model configuration."""
+    model_config = ConfigDict(protected_namespaces=())
+    
     model: ModelParameters = Field(default_factory=ModelParameters)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
